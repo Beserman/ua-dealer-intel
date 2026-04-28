@@ -1,0 +1,4 @@
+[info] https://example.ua -> blocked_by_robots
+[info] https://example.ua/contacts -> blocked_by_robots
+[info] https://example.ua/about -> blocked_by_robots
+[info] Vylucene: Mimo geografickeho rozsahu

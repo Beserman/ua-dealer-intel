@@ -1,0 +1,128 @@
+# Ukrajinsky skraper a obohatenie pre automobilovych dealerov
+
+Tento projekt sluzi na vyhladavanie, extrakciu a bodove hodnotenie ukrajinskych automobilovych dealerov ako potencialnych akvizicnych alebo partnerskych cielov.
+
+Kod je navrhnuty tak, aby bol spustitelny lokalne aj v cloude, najma cez GitHub Actions alebo Codex cloud, bez potreby rucnej instalacie mimo standardneho Python workflow.
+
+## Hlavne vlastnosti
+
+- nacitanie vstupov zo suborov `seed_urls.csv` a `seed_companies.csv`
+- obmedzene a slusne prechadzanie webov s respektovanim `robots.txt`
+- extrakcia kontaktov, jazykov, znaciek, sluzieb a socialnych odkazov
+- geograficke filtrovanie na zapadne regiony Ukrajiny
+- automaticke skore a zaradenie do tierov
+- export do viaclistoveho Excel suboru a do CSV
+- volitelna synchronizacia do Google Sheets
+- testy pre klucove casti logiky
+
+## Struktura projektu
+
+```text
+ua-dealer-intel/
+  README.md
+  requirements.txt
+  src/
+    ua_dealer_intel/
+  data/
+  outputs/
+  tests/
+  .github/
+    workflows/
+```
+
+## Instalacia
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Spustenie
+
+Zakladne spustenie so seed URL:
+
+```bash
+python -m ua_dealer_intel.cli --seeds data/seed_urls.csv
+```
+
+Spustenie so seed URL aj zoznamom spolocnosti:
+
+```bash
+python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv
+```
+
+Volitelne nahratie vystupu do Google Sheets:
+
+```bash
+python -m ua_dealer_intel.cli \
+  --seeds data/seed_urls.csv \
+  --google-sheet-id VASE_ID \
+  --google-credentials data/google_service_account.json
+```
+
+## Vstupne subory
+
+### `data/seed_urls.csv`
+
+```csv
+source_url,company_hint,city,region,source_type
+https://example.ua,Example Dealer,Lviv,Lvivska,website
+```
+
+### `data/seed_companies.csv`
+
+```csv
+company_name,city,region,notes
+Example Dealer,Lviv,Lvivska,
+```
+
+## Vystupy
+
+- `outputs/ua_dealer_targets.xlsx`
+- `outputs/ua_dealer_targets.csv`
+- `outputs/run_log.txt`
+
+Excel obsahuje listy:
+
+1. `targets`
+2. `excluded`
+3. `sources`
+4. `scoring_rules`
+5. `run_log`
+6. `manual_enrichment_queue`
+
+## Google Sheets integracia
+
+Google Sheets integracia je volitelna. Ak zadate `--google-sheet-id` a cestu cez `--google-credentials`, program skusi nahrat jednotlivy obsah listov do zodpovedajucich tabov.
+
+Poznamky:
+
+- odporucany je service account JSON
+- service account musi mat pristup na dany Sheet
+- ak integracia nie je dostupna alebo zlyha, lokalny Excel a CSV sa stale vytvoria
+
+## Pravne a eticke hranice
+
+Projekt umyselne:
+
+- nespracovava LinkedIn obsah ako zdroj na scraping
+- nespracovava Google Maps
+- neobchadza CAPTCHA, prihlasenie ani anti-bot ochrany
+- respektuje `robots.txt` pri prechadzani webu
+- pouziva konzervativne casovanie poziadaviek
+
+## Zname obmedzenia
+
+- niektore weby mozu byt velmi dynamicke a bez JavaScript renderu neposkytnu uplne data
+- detekcia znaciek a sluzieb je heuristicka
+- bez externych platenych zdrojov sa vlastnici a rozhodovacie osoby casto nedaju spolahlivo potvrdit
+- pri vstupoch bez URL sa spolocnost zaradi do manualnej fronty na doplnenie
+
+## Dalsie zlepsenia
+
+- doplnenie volitelneho API obohatenia
+- presnejsia normalizacia telefonov a znaciek
+- inteligentnejsie hladanie vstupnej URL pre firmy bez webu
+- delta rezim pre opakovane behy a porovnanie zmien
+

@@ -1,0 +1,35 @@
+name: Spustenie UA Dealer Intel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Nastavenie Pythonu
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalacia zavislosti
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .[dev]
+
+      - name: Spustenie testov
+        run: pytest
+
+      - name: Spustenie scrapera
+        run: python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv
+
+      - name: Nahratie vystupov
+        uses: actions/upload-artifact@v4
+        with:
+          name: ua-dealer-targets
+          path: outputs/

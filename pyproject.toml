@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ua-dealer-intel"
+version = "0.1.0"
+description = "Skraper a obohatenie ukrajinskych automobilovych dealerov"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "beautifulsoup4==4.13.4",
+  "gspread==6.2.1",
+  "openpyxl==3.1.5",
+  "pandas==2.3.0",
+  "phonenumbers==9.0.6",
+  "requests==2.32.3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.4.1",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+

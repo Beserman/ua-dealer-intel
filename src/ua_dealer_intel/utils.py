@@ -1,0 +1,42 @@
+"""Pomocne utility."""
+
+from __future__ import annotations
+
+import re
+from urllib.parse import urlparse
+
+
+def normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip())
+
+
+def slugify_text(value: str) -> str:
+    return normalize_text(value).lower().replace("’", "'")
+
+
+def split_unique(values: list[str]) -> str:
+    seen: list[str] = []
+    for value in values:
+        cleaned = normalize_text(value)
+        if cleaned and cleaned not in seen:
+            seen.append(cleaned)
+    return "; ".join(seen)
+
+
+def domain_from_url(url: str) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    return parsed.netloc.lower().removeprefix("www.")
+
+
+def yes_no(value: bool) -> str:
+    return "yes" if value else "no"
+
+
+def safe_int(value: object) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return 0
+

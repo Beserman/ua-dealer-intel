@@ -7,12 +7,12 @@ from urllib.parse import urljoin, urlparse
 
 import phonenumbers
 from bs4 import BeautifulSoup
+from phonenumbers import PhoneNumberFormat, PhoneNumberMatcher
 
-from ua_dealer_intel.constants import CHINESE_BRANDS, EU_LANGUAGE_CODES, SERVICE_KEYWORDS, SOCIAL_HOSTS, WESTERN_BRANDS
+from ua_dealer_intel.constants import ALLOWED_LANGUAGE_CODES, CHINESE_BRANDS, EU_LANGUAGE_CODES, SERVICE_KEYWORDS, SOCIAL_HOSTS, WESTERN_BRANDS
 from ua_dealer_intel.utils import domain_from_url, normalize_text, slugify_text, split_unique
 
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
-PHONE_RE = re.compile(r"(\+?\d[\d\s().-]{7,}\d)")
 
 
 def extract_company_name(soup: BeautifulSoup, company_hint: str, source_url: str) -> str:
@@ -57,16 +57,14 @@ def extract_languages(soup: BeautifulSoup, page_url: str) -> list[str]:
     langs: list[str] = []
     html_tag = soup.find("html")
     if html_tag and html_tag.get("lang"):
-        langs.append(html_tag["lang"].split("-")[0].lower())
+        langs.append(_normalize_language_code(html_tag["lang"]))
 
     for tag in soup.find_all("link", attrs={"hreflang": True}):
-        langs.append(tag["hreflang"].split("-")[0].lower())
+        langs.append(_normalize_language_code(tag["hreflang"]))
 
     parsed = urlparse(page_url)
     for piece in parsed.path.split("/"):
-        code = piece.lower()
-        if code in EU_LANGUAGE_CODES or code in {"uk", "ru"}:
-            langs.append(code)
+        langs.append(_normalize_language_code(piece))
 
     unique: list[str] = []
     for lang in langs:
@@ -84,16 +82,25 @@ def _is_valid_phone(candidate: str) -> bool:
         parsed = phonenumbers.parse(candidate, "UA")
     except phonenumbers.NumberParseException:
         return False
-    return phonenumbers.is_possible_number(parsed)
+    return phonenumbers.is_valid_number(parsed) or phonenumbers.is_possible_number(parsed)
 
 
 def extract_phones(text: str) -> list[str]:
     phones: list[str] = []
-    for match in PHONE_RE.findall(text):
-        if _is_valid_phone(match):
-            normalized = normalize_text(match)
-            if normalized not in phones:
-                phones.append(normalized)
+    for match in PhoneNumberMatcher(text, "UA"):
+        raw_value = normalize_text(match.raw_string)
+        digits_only = re.sub(r"\D", "", raw_value)
+        if len(digits_only) < 10:
+            continue
+        if not _is_valid_phone(raw_value):
+            continue
+        try:
+            parsed = phonenumbers.parse(raw_value, "UA")
+            normalized = phonenumbers.format_number(parsed, PhoneNumberFormat.INTERNATIONAL)
+        except phonenumbers.NumberParseException:
+            continue
+        if normalized not in phones:
+            phones.append(normalized)
     return phones
 
 
@@ -111,3 +118,9 @@ def extract_social_links(soup: BeautifulSoup, page_url: str) -> dict[str, str]:
 def summarize_social_links(socials: dict[str, str]) -> str:
     return split_unique(list(socials.values()))
 
+
+def _normalize_language_code(value: str) -> str:
+    code = normalize_text(value).split("-", 1)[0].lower()
+    if code in ALLOWED_LANGUAGE_CODES:
+        return code
+    return ""

@@ -16,7 +16,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--seeds",
-        required=True,
         help="Cesta k CSV suboru s URL seedmi.",
     )
     parser.add_argument(
@@ -36,6 +35,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--google-credentials",
         help="Cesta k service account JSON suboru pre Google Sheets.",
     )
+    parser.add_argument(
+        "--discover",
+        action="store_true",
+        help="Zapne autonomne objavovanie kandidatov z verejnych zdrojov.",
+    )
+    parser.add_argument(
+        "--discover-limit",
+        type=int,
+        default=25,
+        help="Maximum autonomne objavenych kandidatov za jeden beh.",
+    )
     return parser
 
 
@@ -43,12 +53,17 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
+    if not args.seeds and not args.companies and not args.discover:
+        parser.error("Treba zadat --seeds alebo --companies, pripadne zapnut --discover.")
+
     result = run_pipeline(
-        seeds_path=Path(args.seeds),
+        seeds_path=Path(args.seeds) if args.seeds else None,
         companies_path=Path(args.companies) if args.companies else None,
         output_dir=Path(args.output_dir),
         google_sheet_id=args.google_sheet_id,
         google_credentials=Path(args.google_credentials) if args.google_credentials else None,
+        discover=args.discover,
+        discovery_limit=args.discover_limit,
     )
     print(json.dumps(_serialize_result(result), ensure_ascii=False, indent=2))
 

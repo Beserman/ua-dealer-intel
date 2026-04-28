@@ -32,7 +32,7 @@ def test_extract_services() -> None:
 def test_extract_languages_emails_phones_and_socials() -> None:
     html = """
     <html lang="uk">
-      <head><link rel="alternate" hreflang="en" href="/en/" /></head>
+      <head><link rel="alternate" hreflang="en" href="/en/" /><link rel="alternate" hreflang="x-default" href="/" /></head>
       <body>
         Kontakt: info@example.ua, +380 67 123 45 67
         <a href="https://facebook.com/dealer">FB</a>
@@ -45,8 +45,13 @@ def test_extract_languages_emails_phones_and_socials() -> None:
 
     assert extract_languages(soup, "https://example.ua/en/") == ["uk", "en"]
     assert extract_emails(text) == ["info@example.ua"]
-    assert "+380 67 123 45 67" in extract_phones(text)
+    assert "+380 67 123 4567" in extract_phones(text)
     socials = extract_social_links(soup, "https://example.ua")
     assert socials["facebook_url"] == "https://facebook.com/dealer"
     assert socials["instagram_url"] == "https://instagram.com/dealer"
 
+
+def test_extract_phones_filters_non_phone_values() -> None:
+    text = "Tel: +38 (044) 237 02 88 Datum 30.09.2025-1 Hodnota 4 000 000"
+    phones = extract_phones(text)
+    assert phones == ["+380 44 237 0288"]

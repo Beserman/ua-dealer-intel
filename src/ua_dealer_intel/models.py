@@ -14,6 +14,8 @@ class SeedRecord:
     source_type: str = ""
     company_name: str = ""
     notes: str = ""
+    discovery_query: str = ""
+    discovery_provider: str = ""
 
 
 @dataclass(slots=True)
@@ -24,4 +26,3 @@ class ScrapeResult:
     excluded_reason: str = ""
     manual_queue: list[dict[str, object]] = field(default_factory=list)
     logs: list[dict[str, object]] = field(default_factory=list)
-

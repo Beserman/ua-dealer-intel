@@ -26,7 +26,7 @@ jobs:
         run: pytest
 
       - name: Spustenie scrapera
-        run: python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv
+        run: python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv --discover --discover-limit 25
 
       - name: Nahratie vystupov
         uses: actions/upload-artifact@v4

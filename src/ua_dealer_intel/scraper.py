@@ -87,7 +87,7 @@ def build_empty_row(seed: SeedRecord) -> dict[str, object]:
             "entry_channel": seed.source_type or "website",
             "score_manual": 0,
             "status": "new",
-            "source_notes": seed.notes,
+            "source_notes": _source_notes(seed),
         }
     )
     return row
@@ -247,3 +247,14 @@ def _missing_fields(row: dict[str, object]) -> str:
         if not row.get(field):
             missing.append(field)
     return "; ".join(missing)
+
+
+def _source_notes(seed: SeedRecord) -> str:
+    notes: list[str] = []
+    if seed.notes:
+        notes.append(seed.notes)
+    if seed.discovery_provider:
+        notes.append(f"provider={seed.discovery_provider}")
+    if seed.discovery_query:
+        notes.append(f"query={seed.discovery_query}")
+    return "; ".join(notes)

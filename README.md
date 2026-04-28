@@ -7,6 +7,7 @@ Kod je navrhnuty tak, aby bol spustitelny lokalne aj v cloude, najma cez GitHub 
 ## Hlavne vlastnosti
 
 - nacitanie vstupov zo suborov `seed_urls.csv` a `seed_companies.csv`
+- autonomne objavovanie kandidatov z verejnych zdrojov bez nutnosti zadavat URL po jednej
 - obmedzene a slusne prechadzanie webov s respektovanim `robots.txt`
 - extrakcia kontaktov, jazykov, znaciek, sluzieb a socialnych odkazov
 - geograficke filtrovanie na zapadne regiony Ukrajiny
@@ -52,6 +53,22 @@ Spustenie so seed URL aj zoznamom spolocnosti:
 python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv
 ```
 
+Autonomne objavovanie kandidatov bez manualnych URL:
+
+```bash
+python -m ua_dealer_intel.cli --discover --discover-limit 25
+```
+
+Kombinacia manualnych seedov a autonomneho objavovania:
+
+```bash
+python -m ua_dealer_intel.cli \
+  --seeds data/seed_urls.csv \
+  --companies data/seed_companies.csv \
+  --discover \
+  --discover-limit 25
+```
+
 Volitelne nahratie vystupu do Google Sheets:
 
 ```bash
@@ -69,6 +86,8 @@ python -m ua_dealer_intel.cli \
 source_url,company_hint,city,region,source_type
 https://example.ua,Example Dealer,Lviv,Lvivska,website
 ```
+
+Ak chcete ist cisto autonomne, subor moze obsahovat len hlavicku a discovery rezim doplni kandidatov sam.
 
 ### `data/seed_companies.csv`
 
@@ -112,9 +131,22 @@ Projekt umyselne:
 - respektuje `robots.txt` pri prechadzani webu
 - pouziva konzervativne casovanie poziadaviek
 
+## Ako funguje autonomne objavovanie
+
+Discovery rezim:
+
+- sklada vyhladavacie dotazy pre cielove mesta a regiony
+- skusa verejne HTML vysledky vyhladavania iba z povolenych zdrojov
+- odfiltruje socialne siete, Google Maps a LinkedIn
+- deduplikuje domeny
+- nalezene kandidaty posle do standardnej scraping a scoring pipeline
+
+Ak discovery zdroj nevrati vysledok alebo nepovoli pristup, program ho preskoci a pokracuje dalej bez obchadzania ochrany.
+
 ## Zname obmedzenia
 
 - niektore weby mozu byt velmi dynamicke a bez JavaScript renderu neposkytnu uplne data
+- autonomne objavovanie zavisi od dostupnosti verejnych HTML vysledkov a moze sa menit podla zdroja
 - detekcia znaciek a sluzieb je heuristicka
 - bez externych platenych zdrojov sa vlastnici a rozhodovacie osoby casto nedaju spolahlivo potvrdit
 - pri vstupoch bez URL sa spolocnost zaradi do manualnej fronty na doplnenie

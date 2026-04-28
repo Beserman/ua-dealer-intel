@@ -10,7 +10,10 @@ from ua_dealer_intel.models import SeedRecord
 
 def load_seed_urls(path: str | Path) -> list[SeedRecord]:
     records: list[SeedRecord] = []
-    with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+    csv_path = Path(path)
+    if not csv_path.exists():
+        return records
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
             records.append(
@@ -27,7 +30,10 @@ def load_seed_urls(path: str | Path) -> list[SeedRecord]:
 
 def load_seed_companies(path: str | Path) -> list[SeedRecord]:
     records: list[SeedRecord] = []
-    with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+    csv_path = Path(path)
+    if not csv_path.exists():
+        return records
+    with csv_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         for row in reader:
             records.append(
@@ -40,4 +46,3 @@ def load_seed_companies(path: str | Path) -> list[SeedRecord]:
                 )
             )
     return records
-

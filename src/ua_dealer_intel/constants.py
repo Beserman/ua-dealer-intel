@@ -138,3 +138,75 @@ SOCIAL_HOSTS = {
     "whatsapp.com": "whatsapp_url",
 }
 
+ALLOWED_LANGUAGE_CODES = EU_LANGUAGE_CODES | {"uk", "ru"}
+
+DISCOVERY_LOCATIONS = [
+    {"city": "Lviv", "region": "Lvivska", "queries": ["avtosalon lviv", "car dealer lviv", "avtodiler lviv"]},
+    {"city": "Uzhhorod", "region": "Zakarpatska", "queries": ["avtosalon uzhhorod", "car dealer uzhhorod"]},
+    {"city": "Mukachevo", "region": "Zakarpatska", "queries": ["avtosalon mukachevo", "car dealer mukachevo"]},
+    {"city": "Chop", "region": "Zakarpatska", "queries": ["avtosalon chop ukraine"]},
+    {"city": "Berehove", "region": "Zakarpatska", "queries": ["avtosalon berehove ukraine"]},
+    {"city": "Rivne", "region": "Rivnenska", "queries": ["avtosalon rivne", "car dealer rivne"]},
+    {"city": "Lutsk", "region": "Volynska", "queries": ["avtosalon lutsk", "car dealer lutsk"]},
+    {"city": "Ivano-Frankivsk", "region": "Ivano-Frankivska", "queries": ["avtosalon ivano frankivsk", "car dealer ivano frankivsk"]},
+    {"city": "Ternopil", "region": "Ternopilska", "queries": ["avtosalon ternopil", "car dealer ternopil"]},
+    {"city": "Chernivtsi", "region": "Chernivetska", "queries": ["avtosalon chernivtsi", "car dealer chernivtsi"]},
+]
+
+DISCOVERY_PROVIDERS = [
+    {
+        "name": "duckduckgo_html",
+        "url_template": "https://html.duckduckgo.com/html/?q={query}",
+    },
+    {
+        "name": "bing",
+        "url_template": "https://www.bing.com/search?q={query}",
+    },
+]
+
+DISCOVERY_BLOCKLIST_HOSTS = {
+    "duckduckgo.com",
+    "html.duckduckgo.com",
+    "bing.com",
+    "google.com",
+    "maps.google.com",
+    "linkedin.com",
+    "facebook.com",
+    "instagram.com",
+    "youtube.com",
+    "t.me",
+}
+
+DISCOVERY_CITY_VARIANTS = {
+    "Lviv": ["lviv", "львів"],
+    "Uzhhorod": ["uzhhorod", "ужгород"],
+    "Mukachevo": ["mukachevo", "мукачево"],
+    "Chop": ["chop", "чоп"],
+    "Berehove": ["berehove", "берегове", "beregove"],
+    "Rivne": ["rivne", "рівне", "ровно"],
+    "Lutsk": ["lutsk", "луцьк"],
+    "Ivano-Frankivsk": ["ivano-frankivsk", "ivano frankivsk", "івано-франківськ"],
+    "Ternopil": ["ternopil", "тернопіль"],
+    "Chernivtsi": ["chernivtsi", "чернівці", "chernovtsy"],
+}
+
+DISCOVERY_OFFICIAL_SOURCES = [
+    {
+        "name": "toyota_ua",
+        "brand": "Toyota",
+        "url": "https://www.toyota.ua/contact/toyota-dealers",
+        "parser": "toyota_listing",
+    },
+    {
+        "name": "renault_ua",
+        "brand": "Renault",
+        "url": "https://www.renault.ua/find-a-dealer/find-a-dealer-listing.html",
+        "parser": "renault_listing",
+    },
+    {
+        "name": "opel_ua",
+        "brand": "Opel",
+        "url": "https://www.opel.ua/tools/opel-locate-dealer.html",
+        "parser": "opel_listing",
+    },
+]

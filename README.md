@@ -125,4 +125,3 @@ Projekt umyselne:
 - presnejsia normalizacia telefonov a znaciek
 - inteligentnejsie hladanie vstupnej URL pre firmy bez webu
 - delta rezim pre opakovane behy a porovnanie zmien
-

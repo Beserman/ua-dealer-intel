@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import asdict
 from urllib.parse import quote_plus, urljoin, urlparse
 
@@ -309,20 +310,29 @@ def _parse_toyota_listing(
 ) -> tuple[list[SeedRecord], dict[str, object]]:
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
-    for title_tag in soup.find_all(["h2", "h3"]):
-        company = normalize_text(title_tag.get_text(" ", strip=True))
-        if not company or "тойота" not in slugify_text(company):
-            continue
-        block_text, link = _collect_dealer_block_after_heading(title_tag)
-        if not link:
+    for anchor in soup.find_all("a", href=True):
+        if not _is_toyota_website_link(anchor):
             continue
         stats["raw_candidates"] += 1
-        location = _match_location_from_text(block_text)
+        title_tag = anchor.find_previous(["h2", "h3", "h4"])
+        company = normalize_text(
+            str(anchor.get("data-gt-dealername") or title_tag.get_text(" ", strip=True) if title_tag else "")
+        )
+        location_text = normalize_text(
+            " ".join(
+                [
+                    str(anchor.get("data-gt-dealercity") or ""),
+                    str(anchor.get("data-gt-dealerregion") or ""),
+                    _collect_dealer_block_before_anchor(anchor),
+                ]
+            )
+        )
+        location = _match_location_from_text(location_text)
         if not location:
             continue
         city, region = location
         record = _build_discovery_record(
-            href=urljoin(page_url, link),
+            href=urljoin(page_url, str(anchor["href"])),
             company=f"{company} [{brand}]",
             city=city,
             region=region,
@@ -342,6 +352,10 @@ def _parse_renault_listing(
     provider_name: str,
     brand: str,
 ) -> tuple[list[SeedRecord], dict[str, object]]:
+    json_records, json_stats = _parse_renault_jsonld(soup, provider_name, brand)
+    if json_stats["raw_candidates"]:
+        return json_records, json_stats
+
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
     for anchor in soup.find_all("a", href=True):
@@ -360,6 +374,45 @@ def _parse_renault_listing(
         record = _build_discovery_record(
             href=href,
             company=f"{company} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_renault_jsonld(
+    soup: BeautifulSoup,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    for item in _iter_jsonld_objects(soup):
+        if item.get("@type") != "AutomotiveBusiness":
+            continue
+        stats["raw_candidates"] += 1
+        address = item.get("address") if isinstance(item.get("address"), dict) else {}
+        location_text = normalize_text(
+            " ".join(
+                [
+                    str(address.get("addressLocality") or ""),
+                    str(address.get("streetAddress") or ""),
+                ]
+            )
+        )
+        location = _match_location_from_text(location_text)
+        if not location:
+            continue
+        city, region = location
+        record = _build_discovery_record(
+            href=str(item.get("url") or item.get("@id") or ""),
+            company=f"{normalize_text(str(item.get('name') or city))} [{brand}]",
             city=city,
             region=region,
             query=f"official:{brand}",
@@ -500,6 +553,20 @@ def _collect_dealer_block_after_heading(title_tag: object) -> tuple[str, str]:
     return normalize_text(" ".join(text_parts)), link
 
 
+def _collect_dealer_block_before_anchor(anchor: object) -> str:
+    title_tag = anchor.find_previous(["h2", "h3", "h4"])
+    if not title_tag:
+        return ""
+    text_parts = [normalize_text(title_tag.get_text(" ", strip=True))]
+    for sibling in title_tag.find_all_next():
+        if sibling is not title_tag and sibling.name == "a" and sibling is anchor:
+            break
+        if sibling is not title_tag and sibling.name in {"h2", "h3", "h4"}:
+            break
+        text_parts.append(normalize_text(sibling.get_text(" ", strip=True)))
+    return normalize_text(" ".join(text_parts))
+
+
 def _collect_text_after_anchor(anchor: object, max_parts: int = 10) -> str:
     text_parts = [normalize_text(anchor.get_text(" ", strip=True))]
     parts_seen = 0
@@ -537,6 +604,14 @@ def _looks_like_dealer_href(href: str) -> bool:
     return True
 
 
+def _is_toyota_website_link(anchor: object) -> bool:
+    href = clean_url(str(anchor.get("href") or ""))
+    text = slugify_text(anchor.get_text(" ", strip=True))
+    if str(anchor.get("data-gt-action") or "") == "view-dealer":
+        return _looks_like_dealer_href(href)
+    return "перейти на сайт" in text and _looks_like_dealer_href(href)
+
+
 def _is_navigation_label(value: str) -> bool:
     label = slugify_text(value)
     ignored = {
@@ -550,6 +625,31 @@ def _is_navigation_label(value: str) -> bool:
         "повернутись до початку сторінки",
     }
     return label in ignored
+
+
+def _iter_jsonld_objects(soup: BeautifulSoup) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = script.string or script.get_text()
+        if not raw:
+            continue
+        try:
+            decoded = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        items.extend(_flatten_jsonld(decoded))
+    return items
+
+
+def _flatten_jsonld(value: object) -> list[dict[str, object]]:
+    if isinstance(value, dict):
+        graph = value.get("@graph")
+        if isinstance(graph, list):
+            return [item for item in graph if isinstance(item, dict)]
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, dict)]
+    return []
 
 
 def _empty_discovery_stats() -> dict[str, object]:

@@ -57,9 +57,9 @@ SCORING_RULES = [
     },
     {
         "oblast": "znacky",
-        "pravidlo": "cinska znacka",
+        "pravidlo": "cinska znacka alebo klientsky cielova znacka",
         "body": 10,
-        "poznamka": "signal otvorenosti na nove znacky",
+        "poznamka": "signal otvorenosti na nove znacky a fit na Dongfeng, Voyah, Forthing alebo Ford",
     },
     {
         "oblast": "jazyky",
@@ -95,9 +95,11 @@ WESTERN_BRANDS = {
 }
 
 CHINESE_BRANDS = {
-    "byd", "chery", "exeed", "faw", "geely", "great wall", "gwm", "haval",
-    "jac", "jetour", "mg", "omoda", "roewe", "saic", "seres", "zeekr",
+    "byd", "chery", "dongfeng", "exeed", "faw", "forthing", "geely", "great wall", "gwm", "haval",
+    "jac", "jetour", "mg", "omoda", "roewe", "saic", "seres", "voyah", "zeekr",
 }
+
+CLIENT_TARGET_BRANDS = {"dongfeng", "voyah", "forthing", "ford"}
 
 SERVICE_KEYWORDS = {
     "sales": ["sales", "new cars", "avto v nayavnosti", "auto sale", "prodazh", "avtosalon"],
@@ -238,5 +240,11 @@ DISCOVERY_OFFICIAL_SOURCES = [
         "brand": "Mitsubishi",
         "url": "https://mitsubishi-motors.com.ua/find-a-dealer",
         "parser": "mitsubishi_listing",
+    },
+    {
+        "name": "ford_ua",
+        "brand": "Ford",
+        "url": "https://www.ford.ua/dealerships",
+        "parser": "ford_listing",
     },
 ]

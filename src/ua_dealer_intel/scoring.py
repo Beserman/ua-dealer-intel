@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ua_dealer_intel.constants import EU_LANGUAGE_CODES
+from ua_dealer_intel.constants import CLIENT_TARGET_BRANDS, EU_LANGUAGE_CODES
 from ua_dealer_intel.geo import geography_score
-from ua_dealer_intel.utils import safe_int
+from ua_dealer_intel.utils import safe_int, slugify_text
 
 
 def compute_score(row: dict[str, object]) -> dict[str, object]:
@@ -22,7 +22,7 @@ def compute_score(row: dict[str, object]) -> dict[str, object]:
     elif len(brands) == 1:
         score += 8
 
-    if str(row.get("chinese_brand", "")).lower() == "yes":
+    if str(row.get("chinese_brand", "")).lower() == "yes" or _has_client_target_brand(brands):
         score += 10
 
     eu_languages = [lang for lang in languages if lang.lower() in EU_LANGUAGE_CODES]
@@ -49,10 +49,13 @@ def compute_score(row: dict[str, object]) -> dict[str, object]:
     return row
 
 
+def _has_client_target_brand(brands: list[str]) -> bool:
+    return any(slugify_text(brand) in CLIENT_TARGET_BRANDS for brand in brands)
+
+
 def tier_from_score(score: int) -> str:
     if score >= 50:
         return "A"
     if score >= 25:
         return "B"
     return "C"
-

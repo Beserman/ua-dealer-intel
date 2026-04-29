@@ -20,6 +20,24 @@ def test_compute_score_assigns_expected_band() -> None:
     assert result["tier"] == "A"
 
 
+def test_compute_score_boosts_client_target_brand() -> None:
+    row = {
+        "city": "Lviv",
+        "region": "Lvivska",
+        "brands": "Ford",
+        "chinese_brand": "no",
+        "website_languages": "",
+        "services": "",
+        "emails": "",
+        "phones": "+380 67 123 45 67",
+        "social_links": "",
+        "score_manual": 0,
+    }
+    result = compute_score(row)
+    assert result["score_auto"] == 30
+    assert result["tier"] == "B"
+
+
 def test_tier_from_score() -> None:
     assert tier_from_score(50) == "A"
     assert tier_from_score(25) == "B"

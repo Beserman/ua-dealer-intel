@@ -10,7 +10,7 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from ua_dealer_intel.constants import EXCLUDED_REASON_COLUMN, TARGET_COLUMNS
+from ua_dealer_intel.constants import CLIENT_TARGET_BRANDS, EXCLUDED_REASON_COLUMN, TARGET_COLUMNS
 from ua_dealer_intel.extraction import (
     extract_brands,
     extract_company_name,
@@ -24,7 +24,7 @@ from ua_dealer_intel.extraction import (
 from ua_dealer_intel.geo import classify_scope
 from ua_dealer_intel.models import ScrapeResult, SeedRecord
 from ua_dealer_intel.scoring import compute_score
-from ua_dealer_intel.utils import split_unique, yes_no
+from ua_dealer_intel.utils import slugify_text, split_unique, yes_no
 
 
 class WebClient:
@@ -168,7 +168,16 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
         merged_socials.update(extract_social_links(soup, resolved_url))
         row["company_name"] = extract_company_name(soup, str(row["company_name"]), seed.source_url)
 
-    combined_text = " ".join(all_text_parts)
+    seed_context = " ".join(
+        [
+            seed.company_hint,
+            seed.company_name,
+            seed.notes,
+            seed.discovery_query,
+            seed.discovery_provider,
+        ]
+    )
+    combined_text = " ".join([seed_context, *all_text_parts])
     brands, has_chinese = extract_brands(combined_text)
     services = extract_services(combined_text)
 
@@ -188,7 +197,7 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
     row["linkedin_signal"] = "link_only" if row.get("linkedin_url") else "none"
     row["eu_footprint"] = yes_no(any(lang in {"en", "pl", "sk", "cs", "de", "hu", "ro"} for lang in all_languages))
     row["cross_border_evidence"] = "EU jazyk na webe" if row["eu_footprint"] == "yes" else ""
-    row["entry_strength"] = "high" if len(brands) > 1 or row["eu_footprint"] == "yes" else "medium"
+    row["entry_strength"] = "high" if len(brands) > 1 or row["eu_footprint"] == "yes" or _has_client_target_brand(brands) else "medium"
     row["intro_contact"] = row["emails"] or row["phones"]
     row["data_quality"] = _data_quality(row)
     row["red_flags"] = _red_flags(row)
@@ -225,6 +234,8 @@ def _data_quality(row: dict[str, object]) -> str:
 def _next_action(row: dict[str, object]) -> str:
     if not row.get("intro_contact"):
         return "Doplnit kontakt a preverit vlastnika"
+    if _row_has_client_target_brand(row):
+        return "Prioritne pripravit intro pre klientsky fit"
     if row.get("tier") == "A":
         return "Pripravit intro a manualne potvrdit rozhodovaca"
     return "Manualne preverit a doplnit signaly"
@@ -259,6 +270,15 @@ def _final_fetch_status(fetch_status: str, page_errors: list[str]) -> str:
     if all("blocked_by_robots" in item for item in page_errors):
         return "blocked_by_robots"
     return page_errors[-1].split(": ", 1)[1]
+
+
+def _has_client_target_brand(brands: list[str]) -> bool:
+    return any(slugify_text(brand) in CLIENT_TARGET_BRANDS for brand in brands)
+
+
+def _row_has_client_target_brand(row: dict[str, object]) -> bool:
+    brands = [item for item in str(row.get("brands", "")).split("; ") if item]
+    return _has_client_target_brand(brands)
 
 
 def _source_notes(seed: SeedRecord) -> str:

@@ -259,3 +259,41 @@ def test_parse_mitsubishi_official_directory() -> None:
     assert len(results) == 1
     assert results[0].company_hint == "НІКО-ЗАХІД [Mitsubishi]"
     assert results[0].source_url == "http://www.mitsubishi.lviv.example.ua"
+
+
+def test_parse_ford_official_directory() -> None:
+    html = """
+    <html>
+      <body>
+        <div id="dealer-list">
+          <div class="flex flex-row shadow-selectDealerCard my-2.5" id="dealer-1">
+            <div class="text-darkBlue uppercase flex flex-row items-center">Автопалац Тернопіль</div>
+            <div class="text-grayText">вул. Микулинецька, 25а Тернопіль 47222</div>
+            <a href="tel:+38 (097) 559 33 33">+38 (097) 559 33 33</a>
+            <a href="http://www.ford.te.ua">http://www.ford.te.ua</a>
+          </div>
+          <div class="flex flex-row shadow-selectDealerCard my-2.5" id="dealer-2">
+            <div class="text-darkBlue uppercase flex flex-row items-center">Велет Авто</div>
+            <div class="text-grayText">вул. Липинського, 50в Львів 79000</div>
+            <a href="http://www.ford.lviv.ua">http://www.ford.lviv.ua</a>
+          </div>
+          <div class="flex flex-row shadow-selectDealerCard my-2.5" id="dealer-3">
+            <div class="text-darkBlue uppercase flex flex-row items-center">Мустанг Моторс</div>
+            <div class="text-grayText">вул. Грушевського, 37 Одеса 65000</div>
+            <a href="http://www.ford-odessa.org">http://www.ford-odessa.org</a>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://www.ford.ua/dealerships",
+        provider_name="ford_ua",
+        parser_name="ford_listing",
+        brand="Ford",
+    )
+    assert len(results) == 2
+    by_url = {item.source_url: item for item in results}
+    assert by_url["http://www.ford.te.ua"].city == "Ternopil"
+    assert by_url["http://www.ford.lviv.ua"].company_hint == "Велет Авто [Ford]"

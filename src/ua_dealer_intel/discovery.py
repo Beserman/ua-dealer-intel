@@ -277,6 +277,8 @@ def parse_official_directory_detailed(
         return _parse_city_first_table_listing(soup, page_url, provider_name, brand)
     if parser_name == "hyundai_listing":
         return _parse_hyundai_listing_without_detail(html, page_url, provider_name, brand)
+    if parser_name == "ford_listing":
+        return _parse_ford_listing(soup, page_url, provider_name, brand)
     return [], _empty_discovery_stats()
 
 
@@ -681,6 +683,45 @@ def _parse_mitsubishi_listing(
     return records, stats
 
 
+def _parse_ford_listing(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    cards = soup.select("#dealer-list > div[id^='dealer-']") or soup.select("div[id^='dealer-']")
+
+    for card in cards:
+        stats["raw_candidates"] += 1
+        card_text = normalize_text(card.get_text(" ", strip=True))
+        location = _match_location_from_text(card_text)
+        if not location:
+            continue
+
+        website = _extract_first_external_link(str(card), page_url)
+        if not website:
+            continue
+
+        company_tag = card.find(lambda tag: _has_classes(tag, {"text-darkBlue", "uppercase"}))
+        company = normalize_text(company_tag.get_text(" ", strip=True)) if company_tag else ""
+        city, region = location
+        record = _build_discovery_record(
+            href=website,
+            company=f"{company or city} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
 def _build_discovery_record(
     href: str,
     company: str,
@@ -825,6 +866,11 @@ def _looks_like_dealer_href(href: str) -> bool:
     if any(blocked in host for blocked in DISCOVERY_BLOCKLIST_HOSTS):
         return False
     return True
+
+
+def _has_classes(tag: object, required_classes: set[str]) -> bool:
+    classes = set(getattr(tag, "get", lambda *_: [])("class", []))
+    return all(required_class in classes for required_class in required_classes)
 
 
 def _is_toyota_website_link(anchor: object) -> bool:

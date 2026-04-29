@@ -24,6 +24,15 @@ def test_extract_brands_and_chinese_flag() -> None:
     assert chinese is True
 
 
+def test_extract_client_chinese_brands() -> None:
+    brands, chinese = extract_brands("Dealer predava Dongfeng, Voyah, Forthing a Ford")
+    assert "Dongfeng" in brands
+    assert "Voyah" in brands
+    assert "Forthing" in brands
+    assert "Ford" in brands
+    assert chinese is True
+
+
 def test_extract_services() -> None:
     services = extract_services("Ponukame service, trade-in a finance pre firemnych klientov.")
     assert set(services) >= {"service", "trade-in", "finance"}

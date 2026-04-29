@@ -135,7 +135,8 @@ Projekt umyselne:
 
 Discovery rezim:
 
-- cita verejne oficialne zoznamy dealerov vybranych znaciek, aktualne Toyota, Renault, Kia, Hyundai, Peugeot, Citroen a Mitsubishi
+- cita verejne oficialne zoznamy dealerov vybranych znaciek, aktualne Toyota, Renault, Kia, Hyundai, Peugeot, Citroen, Mitsubishi a Ford
+- zvysuje prioritu klientskych znaciek Dongfeng, Voyah, Forthing a Ford bez zmeny struktury vystupneho sheetu
 - sklada vyhladavacie dotazy pre cielove mesta a regiony
 - skusa verejne HTML vysledky vyhladavania iba z povolenych zdrojov
 - odfiltruje socialne siete, Google Maps a LinkedIn

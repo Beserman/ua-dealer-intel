@@ -183,7 +183,7 @@ DISCOVERY_CITY_VARIANTS = {
     "Mukachevo": ["mukachevo", "мукачево"],
     "Chop": ["chop", "чоп"],
     "Berehove": ["berehove", "берегове", "beregove"],
-    "Rivne": ["rivne", "рівне", "ровно"],
+    "Rivne": ["rivne", "рівне", "рiвне", "ровно"],
     "Lutsk": ["lutsk", "луцьк"],
     "Ivano-Frankivsk": ["ivano-frankivsk", "ivano frankivsk", "івано-франківськ"],
     "Ternopil": ["ternopil", "тернопіль"],

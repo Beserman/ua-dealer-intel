@@ -265,7 +265,7 @@ def _parse_duckduckgo(
     region: str,
     query: str,
     provider_name: str,
-) -> list[SeedRecord]:
+) -> tuple[list[SeedRecord], dict[str, object]]:
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
     for anchor in soup.select("a.result__a"):
@@ -286,7 +286,7 @@ def _parse_bing(
     region: str,
     query: str,
     provider_name: str,
-) -> list[SeedRecord]:
+) -> tuple[list[SeedRecord], dict[str, object]]:
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
     for item in soup.select("li.b_algo h2 a"):
@@ -306,23 +306,24 @@ def _parse_toyota_listing(
     page_url: str,
     provider_name: str,
     brand: str,
-) -> list[SeedRecord]:
+) -> tuple[list[SeedRecord], dict[str, object]]:
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
-    for anchor in soup.find_all("a", href=True):
-        anchor_text = normalize_text(anchor.get_text(" ", strip=True)).lower()
-        if "перейти на сайт" not in anchor_text:
+    for title_tag in soup.find_all(["h2", "h3"]):
+        company = normalize_text(title_tag.get_text(" ", strip=True))
+        if not company or "тойота" not in slugify_text(company):
+            continue
+        block_text, link = _collect_dealer_block_after_heading(title_tag)
+        if not link:
             continue
         stats["raw_candidates"] += 1
-        title_tag = anchor.find_previous(["h2", "h3", "h4"])
-        block_text = normalize_text(anchor.parent.get_text(" ", strip=True) if anchor.parent else "")
         location = _match_location_from_text(block_text)
-        if not location or not title_tag:
+        if not location:
             continue
         city, region = location
         record = _build_discovery_record(
-            href=urljoin(page_url, anchor["href"]),
-            company=f"{title_tag.get_text(' ', strip=True)} [{brand}]",
+            href=urljoin(page_url, link),
+            company=f"{company} [{brand}]",
             city=city,
             region=region,
             query=f"official:{brand}",
@@ -340,22 +341,24 @@ def _parse_renault_listing(
     page_url: str,
     provider_name: str,
     brand: str,
-) -> list[SeedRecord]:
+) -> tuple[list[SeedRecord], dict[str, object]]:
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
     for anchor in soup.find_all("a", href=True):
-        anchor_text = normalize_text(anchor.get_text(" ", strip=True)).lower()
-        if "веб-сайт" not in anchor_text:
+        company = normalize_text(anchor.get_text(" ", strip=True))
+        href = clean_url(urljoin(page_url, anchor["href"]))
+        if not _looks_like_external_dealer_site(href, page_url):
+            continue
+        if _is_navigation_label(company):
             continue
         stats["raw_candidates"] += 1
-        parent_text = normalize_text(anchor.parent.get_text(" ", strip=True)) if anchor.parent else ""
-        location = _match_location_from_text(parent_text)
+        block_text = _collect_text_after_anchor(anchor)
+        location = _match_location_from_text(block_text)
         if not location:
             continue
         city, region = location
-        company = _extract_company_from_block(parent_text, city)
         record = _build_discovery_record(
-            href=urljoin(page_url, anchor["href"]),
+            href=href,
             company=f"{company} [{brand}]",
             city=city,
             region=region,
@@ -374,7 +377,7 @@ def _parse_opel_listing(
     page_url: str,
     provider_name: str,
     brand: str,
-) -> list[SeedRecord]:
+) -> tuple[list[SeedRecord], dict[str, object]]:
     records: list[SeedRecord] = []
     stats = _empty_discovery_stats()
     for row in soup.find_all("tr"):
@@ -481,6 +484,72 @@ def _extract_company_from_block(text: str, city: str) -> str:
         if any(char.isalpha() for char in line):
             return line
     return city
+
+
+def _collect_dealer_block_after_heading(title_tag: object) -> tuple[str, str]:
+    text_parts = [normalize_text(title_tag.get_text(" ", strip=True))]
+    link = ""
+    for sibling in title_tag.find_all_next():
+        if sibling is not title_tag and sibling.name in {"h2", "h3"}:
+            break
+        text_parts.append(normalize_text(sibling.get_text(" ", strip=True)))
+        if sibling.name == "a" and sibling.get("href") and not link:
+            href = clean_url(str(sibling["href"]))
+            if _looks_like_dealer_href(href):
+                link = href
+    return normalize_text(" ".join(text_parts)), link
+
+
+def _collect_text_after_anchor(anchor: object, max_parts: int = 10) -> str:
+    text_parts = [normalize_text(anchor.get_text(" ", strip=True))]
+    parts_seen = 0
+    for sibling in anchor.find_all_next():
+        if sibling is not anchor and sibling.name == "a":
+            break
+        text = normalize_text(sibling.get_text(" ", strip=True))
+        if text:
+            text_parts.append(text)
+            parts_seen += 1
+        if parts_seen >= max_parts:
+            break
+    return normalize_text(" ".join(text_parts))
+
+
+def _looks_like_external_dealer_site(url: str, page_url: str) -> bool:
+    host = domain_from_url(url)
+    page_host = domain_from_url(page_url)
+    if not host or host == page_host:
+        return False
+    if any(blocked in host for blocked in DISCOVERY_BLOCKLIST_HOSTS):
+        return False
+    return True
+
+
+def _looks_like_dealer_href(href: str) -> bool:
+    parsed = urlparse(href)
+    if parsed.scheme and parsed.scheme not in {"http", "https"}:
+        return False
+    host = parsed.netloc.lower().removeprefix("www.")
+    if not host:
+        return False
+    if any(blocked in host for blocked in DISCOVERY_BLOCKLIST_HOSTS):
+        return False
+    return True
+
+
+def _is_navigation_label(value: str) -> bool:
+    label = slugify_text(value)
+    ignored = {
+        "",
+        "1",
+        "2",
+        "facebook",
+        "instagram",
+        "youtube",
+        "повернутися",
+        "повернутись до початку сторінки",
+    }
+    return label in ignored
 
 
 def _empty_discovery_stats() -> dict[str, object]:

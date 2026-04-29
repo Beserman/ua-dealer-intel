@@ -71,6 +71,32 @@ def test_parse_toyota_official_directory() -> None:
     assert results[0].source_url == "https://toyota.lviv.ua"
 
 
+def test_parse_renault_official_directory() -> None:
+    html = """
+    <html>
+      <body>
+        <a href="https://lviv-renault.com.ua">Галич-Моторс</a>
+        <p>м. Львів вул. Зелена, буд. 407</p>
+        <p>79066</p>
+        <p>0322 703 066</p>
+        <p>веб-сайт</p>
+        <a href="https://renault.dp.ua">Сінгл-Мотор</a>
+        <p>Дніпро Запорізьке шосе, 25А</p>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://www.renault.ua/find-a-dealer/find-a-dealer-listing.html",
+        provider_name="renault_ua",
+        parser_name="renault_listing",
+        brand="Renault",
+    )
+    assert len(results) == 1
+    assert results[0].city == "Lviv"
+    assert results[0].source_url == "https://lviv-renault.com.ua"
+
+
 def test_parse_opel_official_directory() -> None:
     html = """
     <html>

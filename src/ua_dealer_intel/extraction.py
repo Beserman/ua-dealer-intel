@@ -38,10 +38,17 @@ def extract_brands(text: str) -> tuple[list[str], bool]:
     haystack = slugify_text(text)
     found: list[str] = []
     for brand in sorted(WESTERN_BRANDS | CHINESE_BRANDS):
-        if brand in haystack:
+        if _contains_brand(haystack, brand):
             found.append(brand.title())
     chinese = any(slugify_text(item) in CHINESE_BRANDS for item in found)
     return found, chinese
+
+
+def _contains_brand(haystack: str, brand: str) -> bool:
+    normalized_brand = slugify_text(brand)
+    if not normalized_brand:
+        return False
+    return re.search(rf"(?<![\w-]){re.escape(normalized_brand)}(?![\w-])", haystack) is not None
 
 
 def extract_services(text: str) -> list[str]:

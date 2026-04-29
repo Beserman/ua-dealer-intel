@@ -33,6 +33,12 @@ def test_extract_client_chinese_brands() -> None:
     assert chinese is True
 
 
+def test_extract_brands_requires_word_boundary() -> None:
+    brands, chinese = extract_brands("Ford dealer s minimalnym servisnym balikom")
+    assert brands == ["Ford"]
+    assert chinese is False
+
+
 def test_extract_services() -> None:
     services = extract_services("Ponukame service, trade-in a finance pre firemnych klientov.")
     assert set(services) >= {"service", "trade-in", "finance"}

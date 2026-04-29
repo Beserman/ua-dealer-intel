@@ -146,15 +146,18 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
     merged_socials: dict[str, str] = {}
     final_url = seed.source_url
     fetch_status = "empty"
+    page_errors: list[str] = []
+    ok_pages = 0
 
     for page in pages:
         html, resolved_url, status = client.fetch(page)
         final_url = resolved_url or final_url
         logs.append({"uroven": "info", "sprava": f"{page} -> {status}"})
         if status != "ok" or not html:
-            fetch_status = status
+            page_errors.append(f"{page}: {status}")
             continue
 
+        ok_pages += 1
         fetch_status = "ok"
         soup = BeautifulSoup(html, "html.parser")
         text = soup.get_text(" ", strip=True)
@@ -170,7 +173,8 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
     services = extract_services(combined_text)
 
     row["final_url"] = final_url
-    row["fetch_status"] = fetch_status
+    row["fetch_status"] = "ok" if ok_pages else _final_fetch_status(fetch_status, page_errors)
+    row["error"] = "; ".join(page_errors) if ok_pages and page_errors else row.get("error", "")
     row["brands"] = split_unique(brands)
     row["brand_count"] = len(brands)
     row["chinese_brand"] = yes_no(has_chinese)
@@ -247,6 +251,14 @@ def _missing_fields(row: dict[str, object]) -> str:
         if not row.get(field):
             missing.append(field)
     return "; ".join(missing)
+
+
+def _final_fetch_status(fetch_status: str, page_errors: list[str]) -> str:
+    if not page_errors:
+        return fetch_status
+    if all("blocked_by_robots" in item for item in page_errors):
+        return "blocked_by_robots"
+    return page_errors[-1].split(": ", 1)[1]
 
 
 def _source_notes(seed: SeedRecord) -> str:

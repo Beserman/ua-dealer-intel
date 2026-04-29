@@ -33,9 +33,22 @@ def discover_seed_records(
     for record in official_records:
         domain = domain_from_url(record.source_url)
         if not domain or domain in seen_domains:
+            if domain:
+                logs.append(
+                    {
+                        "uroven": "info",
+                        "sprava": f"Official discovery preskakuje duplicitu domeny: {domain}",
+                    }
+                )
             continue
         seen_domains.add(domain)
         results.append(record)
+        logs.append(
+            {
+                "uroven": "info",
+                "sprava": f"Official discovery pridal kandidata: {record.company_hint} ({record.source_url})",
+            }
+        )
         if len(results) >= limit:
             return results, logs
 
@@ -62,13 +75,30 @@ def discover_seed_records(
                 if status != "ok" or not html:
                     continue
 
-                provider_records = parse_discovery_results(
+                provider_records, provider_stats = parse_discovery_results_detailed(
                     html=html,
                     provider_name=provider_name,
                     city=city,
                     region=region,
                     query=query,
                 )
+                logs.append(
+                    {
+                        "uroven": "info",
+                        "sprava": (
+                            f"Discovery query '{query}' cez {provider_name}: "
+                            f"parser nasiel {provider_stats['raw_candidates']} kandidatov, "
+                            f"prijal {provider_stats['accepted_candidates']}"
+                        ),
+                    }
+                )
+                if provider_stats["sample_urls"]:
+                    logs.append(
+                        {
+                            "uroven": "info",
+                            "sprava": f"Discovery sample URL pre '{query}': {provider_stats['sample_urls']}",
+                        }
+                    )
                 if provider_records:
                     break
 
@@ -84,7 +114,21 @@ def discover_seed_records(
 
             for record in provider_records:
                 domain = domain_from_url(record.source_url)
-                if not domain or domain in seen_domains:
+                if not domain:
+                    logs.append(
+                        {
+                            "uroven": "warning",
+                            "sprava": f"Discovery query '{query}' vratila zaznam bez domeny: {record.source_url}",
+                        }
+                    )
+                    continue
+                if domain in seen_domains:
+                    logs.append(
+                        {
+                            "uroven": "info",
+                            "sprava": f"Discovery query '{query}' preskakuje duplicitu: {domain}",
+                        }
+                    )
                     continue
                 seen_domains.add(domain)
                 results.append(record)
@@ -120,16 +164,39 @@ def discover_from_official_sources(
         if status != "ok" or not html:
             continue
 
-        parsed_records = parse_official_directory(
+        parsed_records, source_stats = parse_official_directory_detailed(
             html=html,
             page_url=url,
             provider_name=str(source["name"]),
             parser_name=str(source["parser"]),
             brand=str(source["brand"]),
         )
+        logs.append(
+            {
+                "uroven": "info",
+                "sprava": (
+                    f"Official source {source['name']} parser nasiel {source_stats['raw_candidates']} kandidatov, "
+                    f"prijal {source_stats['accepted_candidates']}"
+                ),
+            }
+        )
+        if source_stats["sample_urls"]:
+            logs.append(
+                {
+                    "uroven": "info",
+                    "sprava": f"Official source {source['name']} sample URL: {source_stats['sample_urls']}",
+                }
+            )
         for record in parsed_records:
             domain = domain_from_url(record.source_url)
             if not domain or domain in local_seen:
+                if domain:
+                    logs.append(
+                        {
+                            "uroven": "info",
+                            "sprava": f"Official source {source['name']} preskakuje duplicitu: {domain}",
+                        }
+                    )
                 continue
             local_seen.add(domain)
             records.append(record)
@@ -143,14 +210,25 @@ def parse_discovery_results(
     region: str,
     query: str,
 ) -> list[SeedRecord]:
+    items, _ = parse_discovery_results_detailed(html, provider_name, city, region, query)
+    return items
+
+
+def parse_discovery_results_detailed(
+    html: str,
+    provider_name: str,
+    city: str,
+    region: str,
+    query: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
     soup = BeautifulSoup(html, "html.parser")
     if provider_name == "duckduckgo_html":
-        items = _parse_duckduckgo(soup, city, region, query, provider_name)
+        items, stats = _parse_duckduckgo(soup, city, region, query, provider_name)
     elif provider_name == "bing":
-        items = _parse_bing(soup, city, region, query, provider_name)
+        items, stats = _parse_bing(soup, city, region, query, provider_name)
     else:
-        items = []
-    return items
+        items, stats = [], _empty_discovery_stats()
+    return items, stats
 
 
 def parse_official_directory(
@@ -160,6 +238,17 @@ def parse_official_directory(
     parser_name: str,
     brand: str,
 ) -> list[SeedRecord]:
+    items, _ = parse_official_directory_detailed(html, page_url, provider_name, parser_name, brand)
+    return items
+
+
+def parse_official_directory_detailed(
+    html: str,
+    page_url: str,
+    provider_name: str,
+    parser_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
     soup = BeautifulSoup(html, "html.parser")
     if parser_name == "toyota_listing":
         return _parse_toyota_listing(soup, page_url, provider_name, brand)
@@ -167,7 +256,7 @@ def parse_official_directory(
         return _parse_renault_listing(soup, page_url, provider_name, brand)
     if parser_name == "opel_listing":
         return _parse_opel_listing(soup, page_url, provider_name, brand)
-    return []
+    return [], _empty_discovery_stats()
 
 
 def _parse_duckduckgo(
@@ -178,13 +267,17 @@ def _parse_duckduckgo(
     provider_name: str,
 ) -> list[SeedRecord]:
     records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
     for anchor in soup.select("a.result__a"):
+        stats["raw_candidates"] += 1
         href = clean_url(anchor.get("href", ""))
         company = _normalize_result_title(anchor.get_text(" ", strip=True))
         record = _build_discovery_record(href, company, city, region, query, provider_name)
         if record:
             records.append(record)
-    return records
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
 
 
 def _parse_bing(
@@ -195,13 +288,17 @@ def _parse_bing(
     provider_name: str,
 ) -> list[SeedRecord]:
     records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
     for item in soup.select("li.b_algo h2 a"):
+        stats["raw_candidates"] += 1
         href = clean_url(item.get("href", ""))
         company = _normalize_result_title(item.get_text(" ", strip=True))
         record = _build_discovery_record(href, company, city, region, query, provider_name)
         if record:
             records.append(record)
-    return records
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
 
 
 def _parse_toyota_listing(
@@ -211,10 +308,12 @@ def _parse_toyota_listing(
     brand: str,
 ) -> list[SeedRecord]:
     records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
     for anchor in soup.find_all("a", href=True):
         anchor_text = normalize_text(anchor.get_text(" ", strip=True)).lower()
         if "перейти на сайт" not in anchor_text:
             continue
+        stats["raw_candidates"] += 1
         title_tag = anchor.find_previous(["h2", "h3", "h4"])
         block_text = normalize_text(anchor.parent.get_text(" ", strip=True) if anchor.parent else "")
         location = _match_location_from_text(block_text)
@@ -231,7 +330,9 @@ def _parse_toyota_listing(
         )
         if record:
             records.append(record)
-    return records
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
 
 
 def _parse_renault_listing(
@@ -241,10 +342,12 @@ def _parse_renault_listing(
     brand: str,
 ) -> list[SeedRecord]:
     records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
     for anchor in soup.find_all("a", href=True):
         anchor_text = normalize_text(anchor.get_text(" ", strip=True)).lower()
         if "веб-сайт" not in anchor_text:
             continue
+        stats["raw_candidates"] += 1
         parent_text = normalize_text(anchor.parent.get_text(" ", strip=True)) if anchor.parent else ""
         location = _match_location_from_text(parent_text)
         if not location:
@@ -261,7 +364,9 @@ def _parse_renault_listing(
         )
         if record:
             records.append(record)
-    return records
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
 
 
 def _parse_opel_listing(
@@ -271,6 +376,7 @@ def _parse_opel_listing(
     brand: str,
 ) -> list[SeedRecord]:
     records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
     for row in soup.find_all("tr"):
         city_heading = row.find_previous(["h2", "h3", "h4"])
         row_text = normalize_text(
@@ -282,6 +388,7 @@ def _parse_opel_listing(
         link = row.find("a", href=True)
         if not link:
             continue
+        stats["raw_candidates"] += 1
         cells = row.find_all(["td", "th"])
         if not cells:
             continue
@@ -297,7 +404,9 @@ def _parse_opel_listing(
         )
         if record:
             records.append(record)
-    return records
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
 
 
 def _build_discovery_record(
@@ -372,3 +481,19 @@ def _extract_company_from_block(text: str, city: str) -> str:
         if any(char.isalpha() for char in line):
             return line
     return city
+
+
+def _empty_discovery_stats() -> dict[str, object]:
+    return {
+        "raw_candidates": 0,
+        "accepted_candidates": 0,
+        "sample_urls": "",
+    }
+
+
+def _add_sample_url(stats: dict[str, object], url: str) -> None:
+    existing = str(stats["sample_urls"])
+    urls = [item for item in existing.split("; ") if item]
+    if url not in urls and len(urls) < 3:
+        urls.append(url)
+    stats["sample_urls"] = "; ".join(urls)

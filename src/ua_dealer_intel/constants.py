@@ -209,4 +209,34 @@ DISCOVERY_OFFICIAL_SOURCES = [
         "url": "https://www.opel.ua/tools/opel-locate-dealer.html",
         "parser": "opel_listing",
     },
+    {
+        "name": "kia_ua",
+        "brand": "Kia",
+        "url": "https://www.kia.com/api/kia_ukraine/base/fd01/findDealer.selectFindDealerByServiceList?sc.delYn=N&sc.displayYn=Y&isAll=true&pageSize=100&pageNum=1",
+        "parser": "kia_api",
+    },
+    {
+        "name": "hyundai_ua",
+        "brand": "Hyundai",
+        "url": "https://hyundai.com.ua/dealers",
+        "parser": "hyundai_listing",
+    },
+    {
+        "name": "peugeot_ua",
+        "brand": "Peugeot",
+        "url": "https://www.peugeot.ua/links/dealership.html",
+        "parser": "city_first_table",
+    },
+    {
+        "name": "citroen_ua",
+        "brand": "Citroen",
+        "url": "https://citroen.ua/infocenter/find-a-dealer.html",
+        "parser": "city_first_table",
+    },
+    {
+        "name": "mitsubishi_ua",
+        "brand": "Mitsubishi",
+        "url": "https://mitsubishi-motors.com.ua/find-a-dealer",
+        "parser": "mitsubishi_listing",
+    },
 ]

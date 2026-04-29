@@ -6,6 +6,8 @@ on:
 jobs:
   scraper:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - name: Checkout
@@ -26,7 +28,7 @@ jobs:
         run: pytest
 
       - name: Spustenie scrapera
-        run: python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv --discover --discover-limit 25
+        run: python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_companies.csv --discover --discover-limit 100
 
       - name: Nahratie vystupov
         uses: actions/upload-artifact@v4

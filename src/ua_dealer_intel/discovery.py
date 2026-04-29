@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import html as html_lib
+import re
 from dataclasses import asdict
 from urllib.parse import quote_plus, urljoin, urlparse
 
@@ -165,13 +167,22 @@ def discover_from_official_sources(
         if status != "ok" or not html:
             continue
 
-        parsed_records, source_stats = parse_official_directory_detailed(
-            html=html,
-            page_url=url,
-            provider_name=str(source["name"]),
-            parser_name=str(source["parser"]),
-            brand=str(source["brand"]),
-        )
+        if source["parser"] == "hyundai_listing":
+            parsed_records, source_stats = parse_hyundai_directory_detailed(
+                html=html,
+                page_url=url,
+                provider_name=str(source["name"]),
+                brand=str(source["brand"]),
+                fetcher=fetcher,
+            )
+        else:
+            parsed_records, source_stats = parse_official_directory_detailed(
+                html=html,
+                page_url=url,
+                provider_name=str(source["name"]),
+                parser_name=str(source["parser"]),
+                brand=str(source["brand"]),
+            )
         logs.append(
             {
                 "uroven": "info",
@@ -250,6 +261,11 @@ def parse_official_directory_detailed(
     parser_name: str,
     brand: str,
 ) -> tuple[list[SeedRecord], dict[str, object]]:
+    if parser_name == "kia_api":
+        return _parse_kia_api(html, provider_name, brand)
+    if parser_name == "mitsubishi_listing":
+        return _parse_mitsubishi_listing(html, provider_name, brand)
+
     soup = BeautifulSoup(html, "html.parser")
     if parser_name == "toyota_listing":
         return _parse_toyota_listing(soup, page_url, provider_name, brand)
@@ -257,6 +273,10 @@ def parse_official_directory_detailed(
         return _parse_renault_listing(soup, page_url, provider_name, brand)
     if parser_name == "opel_listing":
         return _parse_opel_listing(soup, page_url, provider_name, brand)
+    if parser_name == "city_first_table":
+        return _parse_city_first_table_listing(soup, page_url, provider_name, brand)
+    if parser_name == "hyundai_listing":
+        return _parse_hyundai_listing_without_detail(html, page_url, provider_name, brand)
     return [], _empty_discovery_stats()
 
 
@@ -465,6 +485,202 @@ def _parse_opel_listing(
     return records, stats
 
 
+def _parse_city_first_table_listing(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    for row in soup.find_all("tr"):
+        cells = row.find_all(["td", "th"])
+        if len(cells) < 2:
+            continue
+        city_text = normalize_text(cells[0].get_text(" ", strip=True))
+        company = normalize_text(cells[1].get_text(" ", strip=True))
+        row_text = normalize_text(row.get_text(" ", strip=True))
+        link = row.find("a", href=True)
+        if not link:
+            continue
+
+        stats["raw_candidates"] += 1
+        location = _match_location_from_text(f"{city_text} {row_text}")
+        if not location:
+            continue
+        city, region = location
+        record = _build_discovery_record(
+            href=urljoin(page_url, str(link["href"])),
+            company=f"{company or city} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_kia_api(
+    raw_json: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    try:
+        payload = json.loads(raw_json)
+    except json.JSONDecodeError:
+        return records, stats
+
+    rows = payload.get("dataInfo")
+    if not isinstance(rows, list):
+        return records, stats
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        stats["raw_candidates"] += 1
+        location_text = normalize_text(f"{row.get('city') or ''} {row.get('addr') or ''}")
+        location = _match_location_from_text(location_text)
+        if not location:
+            continue
+        city, region = location
+        record = _build_discovery_record(
+            href=str(row.get("url") or ""),
+            company=f"{normalize_text(str(row.get('dealerNm') or city))} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def parse_hyundai_directory_detailed(
+    html: str,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+    fetcher: object,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    city_map = _extract_hyundai_city_map(html)
+    dealers = _extract_hyundai_dealers(html)
+
+    for city_id, city_dealers in dealers.items():
+        city_name = city_map.get(str(city_id), "")
+        location = _match_location_from_text(city_name)
+        if not location or not isinstance(city_dealers, dict):
+            stats["raw_candidates"] += len(city_dealers) if isinstance(city_dealers, dict) else 0
+            continue
+        city, region = location
+        for dealer in city_dealers.values():
+            if not isinstance(dealer, dict):
+                continue
+            stats["raw_candidates"] += 1
+            nid = str(dealer.get("nid") or "")
+            company = normalize_text(str(dealer.get("title") or city))
+            href = _fetch_hyundai_dealer_site(fetcher, page_url, nid)
+            if not href:
+                continue
+            record = _build_discovery_record(
+                href=href,
+                company=f"{company} [{brand}]",
+                city=city,
+                region=region,
+                query=f"official:{brand}",
+                provider_name=provider_name,
+            )
+            if record:
+                records.append(record)
+                stats["accepted_candidates"] += 1
+                _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_hyundai_listing_without_detail(
+    html: str,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    city_map = _extract_hyundai_city_map(html)
+    dealers = _extract_hyundai_dealers(html)
+
+    for city_id, city_dealers in dealers.items():
+        city_name = city_map.get(str(city_id), "")
+        location = _match_location_from_text(city_name)
+        if not isinstance(city_dealers, dict):
+            continue
+        stats["raw_candidates"] += len(city_dealers)
+        if not location:
+            continue
+        city, region = location
+        for dealer in city_dealers.values():
+            if not isinstance(dealer, dict):
+                continue
+            nid = str(dealer.get("nid") or "")
+            if not nid:
+                continue
+            record = _build_discovery_record(
+                href=urljoin(page_url, f"/node/{nid}"),
+                company=f"{normalize_text(str(dealer.get('title') or city))} [{brand}]",
+                city=city,
+                region=region,
+                query=f"official:{brand}",
+                provider_name=provider_name,
+            )
+            if record:
+                records.append(record)
+                stats["accepted_candidates"] += 1
+                _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_mitsubishi_listing(
+    html: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    dealers = _extract_mitsubishi_dealers(html)
+
+    for dealer in dealers:
+        if not isinstance(dealer, dict):
+            continue
+        stats["raw_candidates"] += 1
+        location_text = normalize_text(f"{dealer.get('city_name') or ''} {dealer.get('address') or ''}")
+        location = _match_location_from_text(location_text)
+        if not location:
+            continue
+        city, region = location
+        record = _build_discovery_record(
+            href=str(dealer.get("website_link") or ""),
+            company=f"{normalize_text(str(dealer.get('title') or city))} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
 def _build_discovery_record(
     href: str,
     company: str,
@@ -639,6 +855,98 @@ def _iter_jsonld_objects(soup: BeautifulSoup) -> list[dict[str, object]]:
             continue
         items.extend(_flatten_jsonld(decoded))
     return items
+
+
+def _extract_hyundai_city_map(html: str) -> dict[str, str]:
+    soup = BeautifulSoup(html, "html.parser")
+    city_map: dict[str, str] = {}
+    for option in soup.find_all("option", value=True):
+        value = normalize_text(str(option.get("value") or ""))
+        label = normalize_text(option.get_text(" ", strip=True))
+        if value and label:
+            city_map[value] = label
+    return city_map
+
+
+def _extract_hyundai_dealers(html: str) -> dict[str, object]:
+    raw = _extract_json_object_after_key(html, '"hmuDealers":')
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return decoded if isinstance(decoded, dict) else {}
+
+
+def _extract_json_object_after_key(text: str, key: str) -> str:
+    start = text.find(key)
+    if start < 0:
+        return ""
+    cursor = start + len(key)
+    while cursor < len(text) and text[cursor].isspace():
+        cursor += 1
+    if cursor >= len(text) or text[cursor] not in "{[":
+        return ""
+
+    opening = text[cursor]
+    closing = "}" if opening == "{" else "]"
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(cursor, len(text)):
+        char = text[index]
+        if escaped:
+            escaped = False
+            continue
+        if char == "\\":
+            escaped = True
+            continue
+        if char == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == opening:
+            depth += 1
+        elif char == closing:
+            depth -= 1
+            if depth == 0:
+                return text[cursor : index + 1]
+    return ""
+
+
+def _fetch_hyundai_dealer_site(fetcher: object, page_url: str, nid: str) -> str:
+    if not nid or not hasattr(fetcher, "fetch"):
+        return ""
+    detail_url = urljoin(page_url, f"/node/get/ajax/{nid}")
+    html, _, status = fetcher.fetch(detail_url)
+    if status != "ok" or not html:
+        return ""
+    return _extract_first_external_link(html, page_url)
+
+
+def _extract_first_external_link(html: str, page_url: str) -> str:
+    soup = BeautifulSoup(html, "html.parser")
+    for anchor in soup.find_all("a", href=True):
+        href = clean_url(urljoin(page_url, str(anchor["href"])))
+        if _looks_like_external_dealer_site(href, page_url):
+            return href
+    return ""
+
+
+def _extract_mitsubishi_dealers(html: str) -> list[dict[str, object]]:
+    match = re.search(r":dealers='(\[.*?\])'", html, re.S)
+    if not match:
+        return []
+    raw = html_lib.unescape(match.group(1)).replace(r"\"", '"').replace(r"\/", "/")
+    if r"\u" in raw:
+        raw = raw.encode().decode("unicode_escape")
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    return [item for item in decoded if isinstance(item, dict)] if isinstance(decoded, list) else []
 
 
 def _flatten_jsonld(value: object) -> list[dict[str, object]]:

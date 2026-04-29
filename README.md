@@ -56,7 +56,7 @@ python -m ua_dealer_intel.cli --seeds data/seed_urls.csv --companies data/seed_c
 Autonomne objavovanie kandidatov bez manualnych URL:
 
 ```bash
-python -m ua_dealer_intel.cli --discover --discover-limit 25
+python -m ua_dealer_intel.cli --discover --discover-limit 100
 ```
 
 Kombinacia manualnych seedov a autonomneho objavovania:
@@ -66,7 +66,7 @@ python -m ua_dealer_intel.cli \
   --seeds data/seed_urls.csv \
   --companies data/seed_companies.csv \
   --discover \
-  --discover-limit 25
+  --discover-limit 100
 ```
 
 Volitelne nahratie vystupu do Google Sheets:
@@ -135,11 +135,14 @@ Projekt umyselne:
 
 Discovery rezim:
 
+- cita verejne oficialne zoznamy dealerov vybranych znaciek, aktualne Toyota, Renault, Kia, Hyundai, Peugeot, Citroen a Mitsubishi
 - sklada vyhladavacie dotazy pre cielove mesta a regiony
 - skusa verejne HTML vysledky vyhladavania iba z povolenych zdrojov
 - odfiltruje socialne siete, Google Maps a LinkedIn
 - deduplikuje domeny
 - nalezene kandidaty posle do standardnej scraping a scoring pipeline
+
+Limit `--discover-limit` znamena maximalny pocet novych kandidatov, ktory sa program pokusi spracovat v jednom behu. Ak verejne zdroje najdu menej kvalitnych kandidatov v povolenych regionoch, vystup bude mensi ako limit.
 
 Ak discovery zdroj nevrati vysledok alebo nepovoli pristup, program ho preskoci a pokracuje dalej bez obchadzania ochrany.
 

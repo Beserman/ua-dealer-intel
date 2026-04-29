@@ -140,6 +140,12 @@ def test_parse_kia_official_api() -> None:
                 "url": "http://kia.uz.ua",
             },
             {
+                "dealerNm": "УКРАВТО ВОЛИНЬ",
+                "city": "м.Луцьк",
+                "addr": "вул. Рівненська, 145",
+                "url": "http://kia.lutsk.ua",
+            },
+            {
                 "dealerNm": "УКРАВТО ОДЕСА",
                 "city": "м.Одеса",
                 "addr": "вул. Інглезі, 15",
@@ -154,9 +160,10 @@ def test_parse_kia_official_api() -> None:
         parser_name="kia_api",
         brand="Kia",
     )
-    assert len(results) == 1
-    assert results[0].city == "Uzhhorod"
-    assert results[0].source_url == "http://kia.uz.ua"
+    assert len(results) == 2
+    by_url = {item.source_url: item for item in results}
+    assert by_url["http://kia.uz.ua"].city == "Uzhhorod"
+    assert by_url["http://kia.lutsk.ua"].city == "Lutsk"
 
 
 def test_parse_city_first_table_official_directory() -> None:

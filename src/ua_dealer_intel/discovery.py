@@ -733,9 +733,16 @@ def _match_location_from_text(text: str) -> tuple[str, str] | None:
         city = str(location["city"])
         region = str(location["region"])
         variants = DISCOVERY_CITY_VARIANTS.get(city, [city.lower()])
-        if any(variant in haystack for variant in variants):
+        if any(_contains_location_variant(haystack, variant) for variant in variants):
             return city, region
     return None
+
+
+def _contains_location_variant(haystack: str, variant: str) -> bool:
+    normalized_variant = slugify_text(variant)
+    if not normalized_variant:
+        return False
+    return re.search(rf"(?<![\w-]){re.escape(normalized_variant)}(?![\w-])", haystack) is not None
 
 
 def _extract_company_from_block(text: str, city: str) -> str:

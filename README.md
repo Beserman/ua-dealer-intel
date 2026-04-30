@@ -136,6 +136,7 @@ Projekt umyselne:
 Discovery rezim:
 
 - cita verejne oficialne zoznamy dealerov vybranych znaciek, aktualne Toyota, Renault, Kia, Hyundai, Peugeot, Citroen, Mitsubishi, Ford, Chery, MG a Haval/GWM
+- doplnkovo cita verejne katalogy a predajne zdroje pre klientove znacky Dongfeng, Voyah a Forthing, napriklad AutoMoto, Electro Mobility a WestMotors
 - zvysuje prioritu klientskych znaciek Dongfeng, Voyah, Forthing a Ford bez zmeny struktury vystupneho sheetu
 - pouziva predajcov cinskych znaciek ako signal vhodnosti pre oslovenie s Dongfeng, Voyah a Forthing
 - sklada vyhladavacie dotazy pre cielove mesta a regiony
@@ -152,6 +153,7 @@ Ak discovery zdroj nevrati vysledok alebo nepovoli pristup, program ho preskoci 
 
 - niektore weby mozu byt velmi dynamicke a bez JavaScript renderu neposkytnu uplne data
 - autonomne objavovanie zavisi od dostupnosti verejnych HTML vysledkov a moze sa menit podla zdroja
+- pri znacke Voyah su verejne zdroje casto mimo cielovej geografie, preto sa mozu objavit hlavne v liste `excluded`
 - detekcia znaciek a sluzieb je heuristicka
 - bez externych platenych zdrojov sa vlastnici a rozhodovacie osoby casto nedaju spolahlivo potvrdit
 - pri vstupoch bez URL sa spolocnost zaradi do manualnej fronty na doplnenie

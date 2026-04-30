@@ -22,7 +22,29 @@ from ua_dealer_intel.models import SeedRecord
 from ua_dealer_intel.utils import clean_url, domain_from_url, normalize_text, slugify_text
 
 
-SAME_HOST_DETAIL_PROVIDERS = {"chery_ua", "mg_ua", "haval_gwm_ua"}
+SAME_HOST_DETAIL_PROVIDERS = {
+    "automoto_dongfeng",
+    "automoto_forthing",
+    "automoto_voyah",
+    "chery_ua",
+    "haval_gwm_ua",
+    "mg_ua",
+}
+
+WESTMOTORS_TARGET_CITY_HOSTS = {
+    "Lviv": ("Lvivska", "lviv.westmotors.com.ua"),
+    "Ivano-Frankivsk": ("Ivano-Frankivska", "ivano.westmotors.com.ua"),
+    "Chernivtsi": ("Chernivetska", "chernivtsi.westmotors.com.ua"),
+}
+
+KNOWN_TARGET_BRAND_SOURCES = {
+    "electro_mobility_voyah": {
+        "company": "Electro Mobility [Voyah]",
+        "city": "Kyiv",
+        "region": "Kyivska",
+        "query": "public:Voyah",
+    }
+}
 
 
 def discover_seed_records(
@@ -43,7 +65,7 @@ def discover_seed_records(
                 logs.append(
                     {
                         "uroven": "info",
-                        "sprava": f"Official discovery preskakuje duplicitu: {seen_key}",
+                        "sprava": f"Discovery zdroj preskakuje duplicitu: {seen_key}",
                     }
                 )
             continue
@@ -52,7 +74,7 @@ def discover_seed_records(
         logs.append(
             {
                 "uroven": "info",
-                "sprava": f"Official discovery pridal kandidata: {record.company_hint} ({record.source_url})",
+                "sprava": f"Discovery zdroj pridal kandidata: {record.company_hint} ({record.source_url})",
             }
         )
         if len(results) >= limit:
@@ -164,7 +186,7 @@ def discover_from_official_sources(
         logs.append(
             {
                 "uroven": "info",
-                "sprava": f"Official discovery source {source['name']}: {status}",
+                "sprava": f"Zdroj objavovania {source['name']}: {status}",
             }
         )
         if status != "ok" or not html:
@@ -190,7 +212,7 @@ def discover_from_official_sources(
             {
                 "uroven": "info",
                 "sprava": (
-                    f"Official source {source['name']} parser nasiel {source_stats['raw_candidates']} kandidatov, "
+                    f"Zdroj objavovania {source['name']} parser nasiel {source_stats['raw_candidates']} kandidatov, "
                     f"prijal {source_stats['accepted_candidates']}"
                 ),
             }
@@ -199,7 +221,7 @@ def discover_from_official_sources(
             logs.append(
                 {
                     "uroven": "info",
-                    "sprava": f"Official source {source['name']} sample URL: {source_stats['sample_urls']}",
+                    "sprava": f"Zdroj objavovania {source['name']} ukazkova URL: {source_stats['sample_urls']}",
                 }
             )
         for record in parsed_records:
@@ -209,7 +231,7 @@ def discover_from_official_sources(
                     logs.append(
                         {
                             "uroven": "info",
-                            "sprava": f"Official source {source['name']} preskakuje duplicitu: {seen_key}",
+                            "sprava": f"Zdroj objavovania {source['name']} preskakuje duplicitu: {seen_key}",
                         }
                     )
                 continue
@@ -288,6 +310,12 @@ def parse_official_directory_detailed(
         return _parse_mg_table_listing(soup, page_url, provider_name, brand)
     if parser_name == "haval_cards":
         return _parse_haval_cards(soup, page_url, provider_name, brand)
+    if parser_name == "automoto_brand_directory":
+        return _parse_automoto_brand_directory(soup, page_url, provider_name, brand)
+    if parser_name == "westmotors_target_brands":
+        return _parse_westmotors_target_brands(soup, page_url, provider_name, brand)
+    if parser_name == "known_target_brand_source":
+        return _parse_known_target_brand_source(page_url, provider_name, brand)
     return [], _empty_discovery_stats()
 
 
@@ -847,6 +875,112 @@ def _parse_haval_cards(
     return records, stats
 
 
+def _parse_automoto_brand_directory(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    seen_links: set[str] = set()
+
+    for dealer_link in soup.select("div.card-name a[href*='/avtosalony/view/']"):
+        href = clean_url(urljoin(page_url, str(dealer_link["href"])))
+        if href in seen_links:
+            continue
+        seen_links.add(href)
+        stats["raw_candidates"] += 1
+
+        card = dealer_link.find_parent(lambda tag: tag.name == "div" and "card" in tag.get("class", []))
+        card_text = normalize_text(card.get_text(" ", strip=True) if card else dealer_link.get_text(" ", strip=True))
+        location = _match_location_from_text(card_text)
+        if not location:
+            continue
+
+        city, region = location
+        company = _clean_automoto_company(dealer_link.get_text(" ", strip=True)) or city
+        record = _build_discovery_record(
+            href=href,
+            company=f"{company} [{brand}]",
+            city=city,
+            region=region,
+            query=f"public:AutoMoto:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_westmotors_target_brands(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    parsed_page = urlparse(page_url)
+    target_path = parsed_page.path.rstrip("/")
+    found_hosts: dict[str, str] = {}
+
+    for anchor in soup.find_all("a", href=True):
+        href = clean_url(urljoin(page_url, str(anchor["href"])))
+        host = domain_from_url(href)
+        for city, (_, expected_host) in WESTMOTORS_TARGET_CITY_HOSTS.items():
+            if host == expected_host:
+                found_hosts[city] = expected_host
+
+    for city, host in found_hosts.items():
+        stats["raw_candidates"] += 1
+        region = WESTMOTORS_TARGET_CITY_HOSTS[city][0]
+        href = f"{parsed_page.scheme or 'https'}://{host}{target_path}"
+        record = _build_discovery_record(
+            href=href,
+            company=f"WESTMOTORS {city} [{brand}]",
+            city=city,
+            region=region,
+            query=f"public:WestMotors:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_known_target_brand_source(
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    stats = _empty_discovery_stats()
+    source = KNOWN_TARGET_BRAND_SOURCES.get(provider_name)
+    if not source:
+        return [], stats
+
+    stats["raw_candidates"] = 1
+    record = _build_discovery_record(
+        href=page_url,
+        company=str(source["company"]),
+        city=str(source["city"]),
+        region=str(source["region"]),
+        query=str(source.get("query") or f"public:{brand}"),
+        provider_name=provider_name,
+        allow_out_of_scope=True,
+    )
+    if not record:
+        return [], stats
+
+    stats["accepted_candidates"] = 1
+    _add_sample_url(stats, record.source_url)
+    return [record], stats
+
+
 def _build_discovery_record(
     href: str,
     company: str,
@@ -854,6 +988,7 @@ def _build_discovery_record(
     region: str,
     query: str,
     provider_name: str,
+    allow_out_of_scope: bool = False,
 ) -> SeedRecord | None:
     parsed = urlparse(href)
     host = parsed.netloc.lower().removeprefix("www.")
@@ -863,7 +998,7 @@ def _build_discovery_record(
         return None
     if href.startswith("mailto:") or href.startswith("tel:"):
         return None
-    if not classify_scope(city, region)[0]:
+    if not allow_out_of_scope and not classify_scope(city, region)[0]:
         return None
     return SeedRecord(
         source_url=_normalize_source_url(href),
@@ -945,6 +1080,12 @@ def _remove_city_prefix(value: str, city: str) -> str:
     for variant in sorted(DISCOVERY_CITY_VARIANTS.get(city, [city.lower()]), key=len, reverse=True):
         company = re.sub(rf"^\s*{re.escape(variant)}\s+", "", company, flags=re.IGNORECASE)
     return normalize_text(company)
+
+
+def _clean_automoto_company(value: str) -> str:
+    company = normalize_text(value)
+    company = re.sub(r"^\s*Автосалон\s*", "", company, flags=re.IGNORECASE)
+    return normalize_text(company.strip(" \"'“”«»"))
 
 
 def _extract_chery_region_links(soup: BeautifulSoup, page_url: str) -> dict[str, str]:

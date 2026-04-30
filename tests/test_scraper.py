@@ -57,3 +57,21 @@ def test_process_seed_uses_official_brand_hint_when_fetch_is_blocked() -> None:
     assert result.row["brands"] == "Ford"
     assert result.row["entry_strength"] == "high"
     assert result.row["score_auto"] == 28
+
+
+def test_process_seed_keeps_brand_hint_for_excluded_candidate() -> None:
+    seed = SeedRecord(
+        source_url="https://electro-mobility.example.ua/listing-make/voyah/",
+        company_hint="Electro Mobility [Voyah]",
+        city="Kyiv",
+        region="Kyivska",
+        source_type="discovered_search",
+        discovery_query="public:Voyah",
+        discovery_provider="electro_mobility_voyah",
+    )
+    result = process_seed(seed, BlockedClient())
+
+    assert result.excluded is True
+    assert result.row["brands"] == "Voyah"
+    assert result.row["chinese_brand"] == "yes"
+    assert result.row["entry_strength"] == "high"

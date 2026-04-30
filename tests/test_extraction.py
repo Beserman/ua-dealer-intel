@@ -20,7 +20,18 @@ def test_extract_brands_and_chinese_flag() -> None:
     brands, chinese = extract_brands("Dealer predava Skoda, Toyota a BYD")
     assert "Skoda" in brands
     assert "Toyota" in brands
-    assert "Byd" in brands
+    assert "BYD" in brands
+    assert chinese is True
+
+
+def test_extract_brands_uses_standard_display_names() -> None:
+    brands, chinese = extract_brands("Dealer ma MG, GWM, BYD, JAC, SAIC a Dongfeng")
+    assert "MG" in brands
+    assert "GWM" in brands
+    assert "BYD" in brands
+    assert "JAC" in brands
+    assert "SAIC" in brands
+    assert "Dongfeng" in brands
     assert chinese is True
 
 

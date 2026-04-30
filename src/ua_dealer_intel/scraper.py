@@ -97,6 +97,14 @@ def _candidate_pages(source_url: str) -> list[str]:
     if not source_url:
         return []
     root = source_url.rstrip("/")
+    parsed = urlparse(root)
+    site_root = f"{parsed.scheme}://{parsed.netloc}"
+    if parsed.path and parsed.path != "/":
+        return [
+            root,
+            urljoin(site_root + "/", "contacts"),
+            urljoin(site_root + "/", "about"),
+        ]
     return [
         root,
         urljoin(root + "/", "contacts"),
@@ -112,6 +120,7 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
 
     in_scope, scope_reason = classify_scope(seed.city, seed.region)
     if not in_scope:
+        _enrich_row_from_seed_context(row, seed)
         excluded_row = dict(row)
         excluded_row[EXCLUDED_REASON_COLUMN] = scope_reason
         return ScrapeResult(
@@ -217,6 +226,24 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
     compute_score(row)
     row["next_action"] = _next_action(row)
     return ScrapeResult(row=row, source=source, manual_queue=manual_queue, logs=logs)
+
+
+def _enrich_row_from_seed_context(row: dict[str, object], seed: SeedRecord) -> None:
+    seed_context = " ".join(
+        [
+            seed.company_hint,
+            seed.company_name,
+            seed.notes,
+            seed.discovery_query,
+            seed.discovery_provider,
+        ]
+    )
+    brands, has_chinese = extract_brands(seed_context)
+    if brands:
+        row["brands"] = split_unique(brands)
+        row["brand_count"] = len(brands)
+        row["chinese_brand"] = yes_no(has_chinese)
+        row["entry_strength"] = "high" if _has_client_target_brand(brands) else "medium"
 
 
 def _data_quality(row: dict[str, object]) -> str:

@@ -182,7 +182,7 @@ DISCOVERY_BLOCKLIST_HOSTS = {
 }
 
 DISCOVERY_CITY_VARIANTS = {
-    "Lviv": ["lviv", "львів"],
+    "Lviv": ["lviv", "lvivska", "львів", "львівська", "львівська область", "львовская область"],
     "Uzhhorod": ["uzhhorod", "ужгород"],
     "Mukachevo": ["mukachevo", "мукачево"],
     "Chop": ["chop", "чоп"],
@@ -266,5 +266,35 @@ DISCOVERY_OFFICIAL_SOURCES = [
         "brand": "Haval",
         "url": "https://www.haval-ukraine.com/partners/dylery/",
         "parser": "haval_cards",
+    },
+    {
+        "name": "automoto_dongfeng",
+        "brand": "Dongfeng",
+        "url": "https://automoto.ua/uk/avtosalony/Dongfeng",
+        "parser": "automoto_brand_directory",
+    },
+    {
+        "name": "automoto_voyah",
+        "brand": "Voyah",
+        "url": "https://automoto.ua/uk/avtosalony/Voyah",
+        "parser": "automoto_brand_directory",
+    },
+    {
+        "name": "automoto_forthing",
+        "brand": "Forthing",
+        "url": "https://automoto.ua/uk/avtosalony/Forthing",
+        "parser": "automoto_brand_directory",
+    },
+    {
+        "name": "westmotors_forthing",
+        "brand": "Dongfeng; Forthing",
+        "url": "https://westmotors.com.ua/catalog-avto-china/dongfeng-forthing",
+        "parser": "westmotors_target_brands",
+    },
+    {
+        "name": "electro_mobility_voyah",
+        "brand": "Voyah",
+        "url": "https://electro-mobility.com.ua/listing-make/voyah/",
+        "parser": "known_target_brand_source",
     },
 ]

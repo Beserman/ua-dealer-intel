@@ -13,6 +13,16 @@ from ua_dealer_intel.constants import ALLOWED_LANGUAGE_CODES, CHINESE_BRANDS, EU
 from ua_dealer_intel.utils import domain_from_url, normalize_text, slugify_text, split_unique
 
 EMAIL_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
+BRAND_DISPLAY_NAMES = {
+    "bmw": "BMW",
+    "byd": "BYD",
+    "faw": "FAW",
+    "gwm": "GWM",
+    "jac": "JAC",
+    "mg": "MG",
+    "mini": "MINI",
+    "saic": "SAIC",
+}
 
 
 def extract_company_name(soup: BeautifulSoup, company_hint: str, source_url: str) -> str:
@@ -39,7 +49,7 @@ def extract_brands(text: str) -> tuple[list[str], bool]:
     found: list[str] = []
     for brand in sorted(WESTERN_BRANDS | CHINESE_BRANDS):
         if _contains_brand(haystack, brand):
-            found.append(brand.title())
+            found.append(BRAND_DISPLAY_NAMES.get(brand, brand.title()))
     chinese = any(slugify_text(item) in CHINESE_BRANDS for item in found)
     return found, chinese
 

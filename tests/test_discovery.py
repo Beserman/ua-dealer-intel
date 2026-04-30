@@ -415,6 +415,72 @@ def test_parse_haval_gwm_official_directory() -> None:
     assert results[0].company_hint == "ТОВ Богдан-Авто Луцьк [Haval]"
 
 
+def test_parse_automoto_brand_directory() -> None:
+    html = """
+    <html>
+      <body>
+        <div class="card">
+          <div class="card-name"><a href="/uk/avtosalony/view/vininter">Автосалон “Мінітрактор”</a></div>
+          <div>м. Вінниця</div>
+        </div>
+        <div class="card">
+          <div class="card-name"><a href="/uk/avtosalony/view/AgroTeh">Автосалон “ТРАКТОР №1”</a></div>
+          <div>Україна, Львівська область, с.Гамаліївка, 7-й км траси Львів-Київ</div>
+        </div>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://automoto.ua/uk/avtosalony/Dongfeng",
+        provider_name="automoto_dongfeng",
+        parser_name="automoto_brand_directory",
+        brand="Dongfeng",
+    )
+    assert len(results) == 1
+    assert results[0].city == "Lviv"
+    assert results[0].source_url == "https://automoto.ua/uk/avtosalony/view/AgroTeh"
+    assert results[0].company_hint == "ТРАКТОР №1 [Dongfeng]"
+
+
+def test_parse_westmotors_target_brands() -> None:
+    html = """
+    <html>
+      <body>
+        <h1>Купить Dongfeng Forthing из Китая</h1>
+        <a href="https://lviv.westmotors.com.ua/">https://lviv.westmotors.com.ua/</a>
+        <a href="https://chernivtsi.westmotors.com.ua/">https://chernivtsi.westmotors.com.ua/</a>
+        <a href="https://kharkiv.westmotors.com.ua/">https://kharkiv.westmotors.com.ua/</a>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://westmotors.com.ua/catalog-avto-china/dongfeng-forthing",
+        provider_name="westmotors_forthing",
+        parser_name="westmotors_target_brands",
+        brand="Dongfeng; Forthing",
+    )
+    assert len(results) == 2
+    by_city = {item.city: item for item in results}
+    assert by_city["Lviv"].source_url == "https://lviv.westmotors.com.ua/catalog-avto-china/dongfeng-forthing"
+    assert by_city["Chernivtsi"].company_hint == "WESTMOTORS Chernivtsi [Dongfeng; Forthing]"
+
+
+def test_parse_known_target_brand_source_allows_excluded_candidate() -> None:
+    results = parse_official_directory(
+        html="<html><body>Voyah</body></html>",
+        page_url="https://electro-mobility.com.ua/listing-make/voyah/",
+        provider_name="electro_mobility_voyah",
+        parser_name="known_target_brand_source",
+        brand="Voyah",
+    )
+    assert len(results) == 1
+    assert results[0].city == "Kyiv"
+    assert results[0].region == "Kyivska"
+    assert results[0].company_hint == "Electro Mobility [Voyah]"
+
+
 def test_discovery_nezahodi_detailove_stranky_z_rovnakej_oficialnej_domeny(monkeypatch) -> None:
     html = """
     <html>

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-import urllib.robotparser
+import re
 from dataclasses import asdict
 from urllib.parse import urljoin, urlparse
 
@@ -26,6 +26,14 @@ from ua_dealer_intel.models import ScrapeResult, SeedRecord
 from ua_dealer_intel.scoring import compute_score
 from ua_dealer_intel.utils import slugify_text, split_unique, yes_no
 
+BRAND_HINT_PRIORITY_PROVIDERS = {
+    "automoto_dongfeng",
+    "automoto_forthing",
+    "automoto_voyah",
+    "electro_mobility_voyah",
+    "westmotors_forthing",
+}
+
 
 class WebClient:
     """Konzervativny HTTP klient s podporou robots.txt."""
@@ -41,21 +49,21 @@ class WebClient:
                 "Accept-Language": "sk,en;q=0.8,uk;q=0.7",
             }
         )
-        self._robots_cache: dict[str, urllib.robotparser.RobotFileParser] = {}
+        self._robots_cache: dict[str, str] = {}
 
     def allowed(self, url: str) -> bool:
         parsed = urlparse(url)
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-        parser = self._robots_cache.get(robots_url)
-        if parser is None:
-            parser = urllib.robotparser.RobotFileParser()
-            parser.set_url(robots_url)
+        robots_text = self._robots_cache.get(robots_url)
+        if robots_text is None:
             try:
-                parser.read()
-            except Exception:
+                response = self.session.get(robots_url, timeout=self.timeout_seconds)
+                response.raise_for_status()
+                robots_text = response.text
+            except requests.RequestException:
                 return False
-            self._robots_cache[robots_url] = parser
-        return parser.can_fetch(self.session.headers["User-Agent"], url)
+            self._robots_cache[robots_url] = robots_text
+        return _robots_allowed_by_text(robots_text, self.session.headers["User-Agent"], url)
 
     def fetch(self, url: str) -> tuple[str, str, str]:
         if not self.allowed(url):
@@ -188,6 +196,9 @@ def process_seed(seed: SeedRecord, client: WebClient) -> ScrapeResult:
     )
     combined_text = " ".join([seed_context, *all_text_parts])
     brands, has_chinese = extract_brands(combined_text)
+    seed_brands, seed_has_chinese = extract_brands(seed_context)
+    if seed.discovery_provider in BRAND_HINT_PRIORITY_PROVIDERS and seed_brands:
+        brands, has_chinese = seed_brands, seed_has_chinese
     services = extract_services(combined_text)
 
     row["final_url"] = final_url
@@ -306,6 +317,80 @@ def _has_client_target_brand(brands: list[str]) -> bool:
 def _row_has_client_target_brand(row: dict[str, object]) -> bool:
     brands = [item for item in str(row.get("brands", "")).split("; ") if item]
     return _has_client_target_brand(brands)
+
+
+def _robots_allowed_by_text(robots_text: str, user_agent: str, url: str) -> bool:
+    rules = _matching_robots_rules(robots_text, user_agent)
+    if not rules:
+        return True
+
+    parsed = urlparse(url)
+    target = parsed.path or "/"
+    if parsed.query:
+        target = f"{target}?{parsed.query}"
+
+    matched: list[tuple[int, bool]] = []
+    for directive, pattern in rules:
+        if not pattern:
+            continue
+        if _robots_pattern_matches(pattern, target):
+            matched.append((len(pattern.rstrip("$")), directive == "allow"))
+
+    if not matched:
+        return True
+
+    matched.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return matched[0][1]
+
+
+def _matching_robots_rules(robots_text: str, user_agent: str) -> list[tuple[str, str]]:
+    groups: list[tuple[list[str], list[tuple[str, str]]]] = []
+    current_agents: list[str] = []
+    current_rules: list[tuple[str, str]] = []
+    has_rule = False
+
+    for raw_line in robots_text.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        if ":" not in line:
+            continue
+
+        key, value = [part.strip() for part in line.split(":", 1)]
+        key_lower = key.lower()
+        value_lower = value.lower()
+        if key_lower == "user-agent":
+            if has_rule:
+                groups.append((current_agents, current_rules))
+                current_agents, current_rules, has_rule = [], [], False
+            current_agents.append(value_lower)
+        elif key_lower in {"allow", "disallow"}:
+            has_rule = True
+            current_rules.append((key_lower, value))
+
+    if current_agents or current_rules:
+        groups.append((current_agents, current_rules))
+
+    user_agent_lower = user_agent.lower()
+    specific_rules: list[tuple[str, str]] = []
+    default_rules: list[tuple[str, str]] = []
+    for agents, rules in groups:
+        if any(agent != "*" and agent in user_agent_lower for agent in agents):
+            specific_rules.extend(rules)
+        elif "*" in agents:
+            default_rules.extend(rules)
+    return specific_rules or default_rules
+
+
+def _robots_pattern_matches(pattern: str, target: str) -> bool:
+    anchor_end = pattern.endswith("$")
+    clean_pattern = pattern[:-1] if anchor_end else pattern
+    regex = "".join(".*" if char == "*" else re.escape(char) for char in clean_pattern)
+    if anchor_end:
+        regex = f"^{regex}$"
+    else:
+        regex = f"^{regex}"
+    return re.search(regex, target) is not None
 
 
 def _source_notes(seed: SeedRecord) -> str:

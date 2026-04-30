@@ -1,5 +1,5 @@
 from ua_dealer_intel.models import SeedRecord
-from ua_dealer_intel.scraper import process_seed
+from ua_dealer_intel.scraper import _robots_allowed_by_text, process_seed
 
 
 class FakeClient:
@@ -24,6 +24,21 @@ class FakeClient:
 class BlockedClient:
     def fetch(self, url: str) -> tuple[str, str, str]:
         return "", url, "blocked_by_robots"
+
+
+class BrandNoiseClient:
+    def fetch(self, url: str) -> tuple[str, str, str]:
+        html = """
+        <html lang="uk">
+          <head><title>AutoMoto detail</title></head>
+          <body>
+            Навігація: Audi BMW BYD Chery Ford GWM Haval MG Voyah Zeekr
+            Основний дилер Dongfeng у Львівській області
+            +380 67 111 2233
+          </body>
+        </html>
+        """
+        return html, url, "ok"
 
 
 def test_process_seed_keeps_ok_status_when_some_pages_fail() -> None:
@@ -75,3 +90,46 @@ def test_process_seed_keeps_brand_hint_for_excluded_candidate() -> None:
     assert result.row["brands"] == "Voyah"
     assert result.row["chinese_brand"] == "yes"
     assert result.row["entry_strength"] == "high"
+
+
+def test_process_seed_prioritizes_public_directory_brand_hint() -> None:
+    seed = SeedRecord(
+        source_url="https://automoto.ua/uk/avtosalony/view/AgroTeh",
+        company_hint="ТРАКТОР №1 [Dongfeng]",
+        city="Lviv",
+        region="Lvivska",
+        source_type="discovered_search",
+        discovery_query="public:AutoMoto:Dongfeng",
+        discovery_provider="automoto_dongfeng",
+    )
+    result = process_seed(seed, BrandNoiseClient())
+
+    assert result.row["brands"] == "Dongfeng"
+    assert result.row["chinese_brand"] == "yes"
+    assert result.row["score_total"] >= 30
+
+
+def test_robots_parser_allows_clean_catalog_path_and_blocks_query() -> None:
+    robots_text = """
+    User-agent: *
+    Allow: /
+    Allow: /catalog-avto-china/
+    Disallow: /catalog-avto-china*?
+    Disallow: /api/
+    """
+
+    assert _robots_allowed_by_text(
+        robots_text,
+        "ua-dealer-intel/0.1",
+        "https://westmotors.example/catalog-avto-china/dongfeng-forthing",
+    )
+    assert not _robots_allowed_by_text(
+        robots_text,
+        "ua-dealer-intel/0.1",
+        "https://westmotors.example/catalog-avto-china/dongfeng-forthing?sort=price",
+    )
+    assert not _robots_allowed_by_text(
+        robots_text,
+        "ua-dealer-intel/0.1",
+        "https://westmotors.example/api/search",
+    )

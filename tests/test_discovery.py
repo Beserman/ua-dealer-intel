@@ -1,6 +1,8 @@
 import json
 
+from ua_dealer_intel import discovery as discovery_module
 from ua_dealer_intel.discovery import (
+    discover_from_official_sources,
     parse_discovery_results,
     parse_hyundai_directory_detailed,
     parse_official_directory,
@@ -297,3 +299,154 @@ def test_parse_ford_official_directory() -> None:
     by_url = {item.source_url: item for item in results}
     assert by_url["http://www.ford.te.ua"].city == "Ternopil"
     assert by_url["http://www.ford.lviv.ua"].company_hint == "Велет Авто [Ford]"
+
+
+def test_parse_mg_official_directory() -> None:
+    html = """
+    <html>
+      <body>
+        <table>
+          <tr>
+            <td><a title="Івано-Франківськ Альянс-А" href="../../../dealer/aliansa"><strong>Івано-Франківськ<br/>Альянс-А</strong></a></td>
+            <td>Калуське шосе, 2К</td>
+          </tr>
+          <tr>
+            <td><a title="Львів Велет Авто" href="../../../dealer/velet-avto"><strong>Львів<br/>Велет Авто</strong></a></td>
+            <td>вулиця Липинського, 50в</td>
+          </tr>
+          <tr>
+            <td><a title="Мукачево ТОВ " href="../../../dealer/motorcom">Мукачево ТОВ "Прем'єр Авто"</a></td>
+            <td>с. Клячаново, вул.Автомобілістів, 28 А</td>
+          </tr>
+          <tr>
+            <td><a title="Одеса Мустанг Моторс" href="../../../dealer/mustang-motors">Одеса Мустанг Моторс</a></td>
+            <td>вулиця Грушевського, 37</td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://mgmotor.com.ua/dealers",
+        provider_name="mg_ua",
+        parser_name="mg_table",
+        brand="MG",
+    )
+    assert len(results) == 3
+    by_url = {item.source_url: item for item in results}
+    assert by_url["https://mgmotor.com.ua/dealer/aliansa"].city == "Ivano-Frankivsk"
+    assert by_url["https://mgmotor.com.ua/dealer/velet-avto"].company_hint == "Велет Авто [MG]"
+    assert by_url["https://mgmotor.com.ua/dealer/motorcom"].company_hint == 'ТОВ "Прем\'єр Авто" [MG]'
+
+
+def test_parse_chery_official_directory_region_blocks() -> None:
+    html = """
+    <html>
+      <body>
+        <a href="/autosalon/lvivska-oblast.html">Львівська область</a>
+        <a href="/autosalon/zakarpatska-oblast.html">Закарпатська область</a>
+        <div class="l_d_m">
+          <h3>Львівська область</h3>
+          <div class="dealer">
+            <div class="left_info"><h3>ТОВ «УКРАВТО ЛЬВІВ»</h3></div>
+            <div class="right_info">
+              <p>м. Львів, вул. Городоцька, 282</p>
+              <a href="https://maps.app.goo.gl/test">подивитись на карті</a>
+            </div>
+          </div>
+        </div>
+        <div class="l_d_m">
+          <h3>Закарпатська область</h3>
+          <div class="dealer">
+            <div class="left_info"><h3>ТОВ "УКРАВТО ЗАКАРПАТТЯ"</h3></div>
+            <div class="right_info"><p>м. Ужгород, вул. Олександра Блеста, 20</p></div>
+          </div>
+        </div>
+        <div class="l_d_m">
+          <h3>Одеська область</h3>
+          <div class="dealer">
+            <div class="left_info"><h3>ТОВ «УКРАВТО ОДЕСА»</h3></div>
+            <div class="right_info"><p>м. Одеса, вул. Київська, 19</p></div>
+          </div>
+        </div>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://chery.ua/autosalon.html",
+        provider_name="chery_ua",
+        parser_name="chery_regions",
+        brand="Chery",
+    )
+    assert len(results) == 2
+    by_city = {item.city: item for item in results}
+    assert by_city["Lviv"].source_url == "https://chery.ua/autosalon/lvivska-oblast.html"
+    assert by_city["Uzhhorod"].company_hint == 'ТОВ "УКРАВТО ЗАКАРПАТТЯ" [Chery]'
+
+
+def test_parse_haval_gwm_official_directory() -> None:
+    html = """
+    <html>
+      <body>
+        <div class="uk-card">
+          <h4 class="uk-card-title">ТОВ Богдан-Авто Луцьк</h4>
+          <div>43020, Україна, Волинська, Луцьк, вул. Рівненська, 100</div>
+          <a href="https://www.haval-ukraine.com/partners/dylery/bohdan-avto-lutsk/" class="uk-button uk-button-default">Докладніше</a>
+        </div>
+        <div class="uk-card">
+          <h4 class="uk-card-title">ТОВ Богдан-Авто Черкаси</h4>
+          <div>Черкаси, вул. Смілянська, 153</div>
+          <a href="https://www.haval-ukraine.com/partners/dylery/tov-bohdan-avto-cherkasy/" class="uk-button uk-button-default">Докладніше</a>
+        </div>
+      </body>
+    </html>
+    """
+    results = parse_official_directory(
+        html=html,
+        page_url="https://www.haval-ukraine.com/partners/dylery/",
+        provider_name="haval_gwm_ua",
+        parser_name="haval_cards",
+        brand="Haval",
+    )
+    assert len(results) == 1
+    assert results[0].city == "Lutsk"
+    assert results[0].company_hint == "ТОВ Богдан-Авто Луцьк [Haval]"
+
+
+def test_discovery_nezahodi_detailove_stranky_z_rovnakej_oficialnej_domeny(monkeypatch) -> None:
+    html = """
+    <html>
+      <body>
+        <table>
+          <tr>
+            <td><a title="Івано-Франківськ Альянс-А" href="../../../dealer/aliansa">Івано-Франківськ Альянс-А</a></td>
+          </tr>
+          <tr>
+            <td><a title="Львів Велет Авто" href="../../../dealer/velet-avto">Львів Велет Авто</a></td>
+          </tr>
+        </table>
+      </body>
+    </html>
+    """
+
+    class Fetcher:
+        def fetch(self, url: str) -> tuple[str, str, str]:
+            assert url == "https://mgmotor.com.ua/dealers"
+            return html, url, "ok"
+
+    monkeypatch.setattr(
+        discovery_module,
+        "DISCOVERY_OFFICIAL_SOURCES",
+        [
+            {
+                "name": "mg_ua",
+                "brand": "MG",
+                "url": "https://mgmotor.com.ua/dealers",
+                "parser": "mg_table",
+            }
+        ],
+    )
+    records, _ = discover_from_official_sources(Fetcher(), set())
+    assert len(records) == 2

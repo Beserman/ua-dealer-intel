@@ -22,6 +22,9 @@ from ua_dealer_intel.models import SeedRecord
 from ua_dealer_intel.utils import clean_url, domain_from_url, normalize_text, slugify_text
 
 
+SAME_HOST_DETAIL_PROVIDERS = {"chery_ua", "mg_ua", "haval_gwm_ua"}
+
+
 def discover_seed_records(
     fetcher: object,
     limit: int = 25,
@@ -34,17 +37,17 @@ def discover_seed_records(
     official_records, official_logs = discover_from_official_sources(fetcher, seen_domains)
     logs.extend(official_logs)
     for record in official_records:
-        domain = domain_from_url(record.source_url)
-        if not domain or domain in seen_domains:
-            if domain:
+        seen_key = _discovery_seen_key(record.source_url, record.discovery_provider)
+        if not seen_key or seen_key in seen_domains:
+            if seen_key:
                 logs.append(
                     {
                         "uroven": "info",
-                        "sprava": f"Official discovery preskakuje duplicitu domeny: {domain}",
+                        "sprava": f"Official discovery preskakuje duplicitu: {seen_key}",
                     }
                 )
             continue
-        seen_domains.add(domain)
+        seen_domains.add(seen_key)
         results.append(record)
         logs.append(
             {
@@ -116,8 +119,8 @@ def discover_seed_records(
                 continue
 
             for record in provider_records:
-                domain = domain_from_url(record.source_url)
-                if not domain:
+                seen_key = _discovery_seen_key(record.source_url, record.discovery_provider)
+                if not seen_key:
                     logs.append(
                         {
                             "uroven": "warning",
@@ -125,15 +128,15 @@ def discover_seed_records(
                         }
                     )
                     continue
-                if domain in seen_domains:
+                if seen_key in seen_domains:
                     logs.append(
                         {
                             "uroven": "info",
-                            "sprava": f"Discovery query '{query}' preskakuje duplicitu: {domain}",
+                            "sprava": f"Discovery query '{query}' preskakuje duplicitu: {seen_key}",
                         }
                     )
                     continue
-                seen_domains.add(domain)
+                seen_domains.add(seen_key)
                 results.append(record)
                 logs.append(
                     {
@@ -200,17 +203,17 @@ def discover_from_official_sources(
                 }
             )
         for record in parsed_records:
-            domain = domain_from_url(record.source_url)
-            if not domain or domain in local_seen:
-                if domain:
+            seen_key = _discovery_seen_key(record.source_url, str(source["name"]))
+            if not seen_key or seen_key in local_seen:
+                if seen_key:
                     logs.append(
                         {
                             "uroven": "info",
-                            "sprava": f"Official source {source['name']} preskakuje duplicitu: {domain}",
+                            "sprava": f"Official source {source['name']} preskakuje duplicitu: {seen_key}",
                         }
                     )
                 continue
-            local_seen.add(domain)
+            local_seen.add(seen_key)
             records.append(record)
     return records, logs
 
@@ -279,6 +282,12 @@ def parse_official_directory_detailed(
         return _parse_hyundai_listing_without_detail(html, page_url, provider_name, brand)
     if parser_name == "ford_listing":
         return _parse_ford_listing(soup, page_url, provider_name, brand)
+    if parser_name == "chery_regions":
+        return _parse_chery_region_blocks(soup, page_url, provider_name, brand)
+    if parser_name == "mg_table":
+        return _parse_mg_table_listing(soup, page_url, provider_name, brand)
+    if parser_name == "haval_cards":
+        return _parse_haval_cards(soup, page_url, provider_name, brand)
     return [], _empty_discovery_stats()
 
 
@@ -722,6 +731,122 @@ def _parse_ford_listing(
     return records, stats
 
 
+def _parse_mg_table_listing(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+
+    for row in soup.find_all("tr"):
+        dealer_link = row.find("a", href=True)
+        if not dealer_link:
+            continue
+
+        stats["raw_candidates"] += 1
+        row_text = normalize_text(row.get_text(" ", strip=True))
+        location = _match_location_from_text(row_text)
+        if not location:
+            continue
+
+        city, region = location
+        raw_company = _best_anchor_label(dealer_link)
+        company = _remove_city_prefix(raw_company, city) or city
+        record = _build_discovery_record(
+            href=urljoin(page_url, str(dealer_link["href"])),
+            company=f"{company} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_chery_region_blocks(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+    region_links = _extract_chery_region_links(soup, page_url)
+
+    for region_block in soup.select("div.l_d_m"):
+        region_heading = region_block.find("h3")
+        region_name = normalize_text(region_heading.get_text(" ", strip=True)) if region_heading else ""
+        fallback_url = region_links.get(region_name, page_url)
+        for dealer in region_block.select("div.dealer"):
+            stats["raw_candidates"] += 1
+            dealer_text = normalize_text(dealer.get_text(" ", strip=True))
+            location = _match_location_from_text(dealer_text)
+            if not location:
+                continue
+
+            city, region = location
+            company_tag = dealer.select_one(".left_info h3")
+            company = normalize_text(company_tag.get_text(" ", strip=True)) if company_tag else city
+            href = _extract_first_external_link(str(dealer), page_url) or fallback_url
+            record = _build_discovery_record(
+                href=href,
+                company=f"{company} [{brand}]",
+                city=city,
+                region=region,
+                query=f"official:{brand}",
+                provider_name=provider_name,
+            )
+            if record:
+                records.append(record)
+                stats["accepted_candidates"] += 1
+                _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
+def _parse_haval_cards(
+    soup: BeautifulSoup,
+    page_url: str,
+    provider_name: str,
+    brand: str,
+) -> tuple[list[SeedRecord], dict[str, object]]:
+    records: list[SeedRecord] = []
+    stats = _empty_discovery_stats()
+
+    for card in soup.select(".uk-card"):
+        title = card.select_one("h4.uk-card-title")
+        detail_link = card.select_one("a.uk-button[href]")
+        if not title or not detail_link:
+            continue
+
+        stats["raw_candidates"] += 1
+        card_text = normalize_text(card.get_text(" ", strip=True))
+        location = _match_location_from_text(card_text)
+        if not location:
+            continue
+
+        city, region = location
+        company = normalize_text(title.get_text(" ", strip=True))
+        record = _build_discovery_record(
+            href=urljoin(page_url, str(detail_link["href"])),
+            company=f"{company} [{brand}]",
+            city=city,
+            region=region,
+            query=f"official:{brand}",
+            provider_name=provider_name,
+        )
+        if record:
+            records.append(record)
+            stats["accepted_candidates"] += 1
+            _add_sample_url(stats, record.source_url)
+    return records, stats
+
+
 def _build_discovery_record(
     href: str,
     company: str,
@@ -750,6 +875,18 @@ def _build_discovery_record(
         discovery_query=query,
         discovery_provider=provider_name,
     )
+
+
+def _discovery_seen_key(source_url: str, provider_name: str = "") -> str:
+    domain = domain_from_url(source_url)
+    if not domain:
+        return ""
+    if provider_name in SAME_HOST_DETAIL_PROVIDERS:
+        parsed = urlparse(source_url)
+        path = parsed.path.rstrip("/")
+        if path:
+            return f"{domain}{path}"
+    return domain
 
 
 def _normalize_result_title(title: str) -> str:
@@ -801,6 +938,29 @@ def _extract_company_from_block(text: str, city: str) -> str:
         if any(char.isalpha() for char in line):
             return line
     return city
+
+
+def _remove_city_prefix(value: str, city: str) -> str:
+    company = normalize_text(value)
+    for variant in sorted(DISCOVERY_CITY_VARIANTS.get(city, [city.lower()]), key=len, reverse=True):
+        company = re.sub(rf"^\s*{re.escape(variant)}\s+", "", company, flags=re.IGNORECASE)
+    return normalize_text(company)
+
+
+def _extract_chery_region_links(soup: BeautifulSoup, page_url: str) -> dict[str, str]:
+    links: dict[str, str] = {}
+    for anchor in soup.find_all("a", href=True):
+        label = normalize_text(anchor.get_text(" ", strip=True))
+        href = str(anchor.get("href") or "")
+        if label and "/autosalon/" in href:
+            links[label] = _normalize_source_url(urljoin(page_url, href))
+    return links
+
+
+def _best_anchor_label(anchor: object) -> str:
+    title = normalize_text(str(anchor.get("title") or ""))
+    text = normalize_text(anchor.get_text(" ", strip=True))
+    return text if len(text) > len(title) else title
 
 
 def _collect_dealer_block_after_heading(title_tag: object) -> tuple[str, str]:

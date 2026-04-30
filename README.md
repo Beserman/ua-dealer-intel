@@ -135,12 +135,13 @@ Projekt umyselne:
 
 Discovery rezim:
 
-- cita verejne oficialne zoznamy dealerov vybranych znaciek, aktualne Toyota, Renault, Kia, Hyundai, Peugeot, Citroen, Mitsubishi a Ford
+- cita verejne oficialne zoznamy dealerov vybranych znaciek, aktualne Toyota, Renault, Kia, Hyundai, Peugeot, Citroen, Mitsubishi, Ford, Chery, MG a Haval/GWM
 - zvysuje prioritu klientskych znaciek Dongfeng, Voyah, Forthing a Ford bez zmeny struktury vystupneho sheetu
+- pouziva predajcov cinskych znaciek ako signal vhodnosti pre oslovenie s Dongfeng, Voyah a Forthing
 - sklada vyhladavacie dotazy pre cielove mesta a regiony
 - skusa verejne HTML vysledky vyhladavania iba z povolenych zdrojov
 - odfiltruje socialne siete, Google Maps a LinkedIn
-- deduplikuje domeny
+- deduplikuje domeny a pri oficialnych detailoch dealerov aj konkretne URL adresy
 - nalezene kandidaty posle do standardnej scraping a scoring pipeline
 
 Limit `--discover-limit` znamena maximalny pocet novych kandidatov, ktory sa program pokusi spracovat v jednom behu. Ak verejne zdroje najdu menej kvalitnych kandidatov v povolenych regionoch, vystup bude mensi ako limit.

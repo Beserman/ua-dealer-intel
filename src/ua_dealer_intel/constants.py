@@ -171,7 +171,9 @@ DISCOVERY_BLOCKLIST_HOSTS = {
     "html.duckduckgo.com",
     "bing.com",
     "google.com",
+    "goo.gl",
     "maps.google.com",
+    "maps.app.goo.gl",
     "linkedin.com",
     "facebook.com",
     "instagram.com",
@@ -246,5 +248,23 @@ DISCOVERY_OFFICIAL_SOURCES = [
         "brand": "Ford",
         "url": "https://www.ford.ua/dealerships",
         "parser": "ford_listing",
+    },
+    {
+        "name": "chery_ua",
+        "brand": "Chery",
+        "url": "https://chery.ua/autosalon.html",
+        "parser": "chery_regions",
+    },
+    {
+        "name": "mg_ua",
+        "brand": "MG",
+        "url": "https://mgmotor.com.ua/dealers",
+        "parser": "mg_table",
+    },
+    {
+        "name": "haval_gwm_ua",
+        "brand": "Haval",
+        "url": "https://www.haval-ukraine.com/partners/dylery/",
+        "parser": "haval_cards",
     },
 ]
